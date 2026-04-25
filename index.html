@@ -290,7 +290,7 @@
 </head>
 <body>
 
-    <h1>Groove Generator <span class="version">v4.1 Cathartic Wall</span></h1>
+    <h1>Groove Generator <span class="version">v4.2 Sweet Spot</span></h1>
 
     <div class="controls-row">
         <button id="playBtn" class="main-btn">PLAY</button>
@@ -488,13 +488,17 @@
             else if (loudness < 0.75) fillAmount = 1; 
             else fillAmount = Math.max(0, 1.0 - (loudness - 0.75) * 4); 
 
-            let isDoom = complexity < 0.25;
-            let isRock = complexity >= 0.25 && complexity < 0.55;
-            let isPunk = complexity >= 0.55 && complexity < 0.75;
-            let isBlast = complexity >= 0.75;
+            // ==========================================
+            // ÚJ ZÓNA FELOSZTÁS (Középen hatalmas Sweet Spot!)
+            // ==========================================
+            let isDoom = complexity < 0.15;                               // 0% - 15% (Szűkebb)
+            let isRock = complexity >= 0.15 && complexity < 0.60;         // 15% - 60% (Szélesebb)
+            let isPunk = complexity >= 0.60 && complexity < 0.85;         // 60% - 85% (Szélesebb)
+            let isBlast = complexity >= 0.85;                             // 85% - 100% (Szűkebb)
             
             let isHeavyBreakdown = (isDoom && loudness >= 0.75);
-            let isDeathcoreWall = (isBlast && loudness >= 0.85); // AZ ÚJ KATARTIKUS ZÓNA
+            // Hangfal: Csak a legeslegjobb felső sarokban (X > 90%)
+            let isDeathcoreWall = (isBlast && loudness >= 0.85 && complexity >= 0.90); 
 
             for(let i = 0; i < totalSteps; i++) {
                 let kVel = 0;
@@ -512,11 +516,12 @@
                 if (isHeavyBreakdown) {
                     if (mI === 8) isSnareAnchor = true; 
                     if (mI === 0) isKickAnchor = true; 
-                    if (complexity >= 0.08 && mI === 2) isKickAnchor = true;
-                    if (complexity >= 0.16 && mI === 14) isKickAnchor = true;
+                    
+                    // Szűkített breakdown zónához igazított belépések
+                    if (complexity >= 0.05 && mI === 2) isKickAnchor = true;
+                    if (complexity >= 0.10 && mI === 14) isKickAnchor = true;
                 }
                 else if (isDeathcoreWall) {
-                    // DEATHCORE WALL: Katartikus darálás (Mindenhol lábdob, nyolcadokon pergő)
                     isKickAnchor = true; 
                     if (mI % 2 === 0) isSnareAnchor = true;
                 }
@@ -527,15 +532,12 @@
                     if (mI === 4 || mI === 12) isSnareAnchor = true;
                     if (mI === 0 || mI === 8) isKickAnchor = true;
                 } else if (isPunk) {
-                    // PUNK ALAP 
                     if (mI === 2 || mI === 6 || mI === 10 || mI === 14) isSnareAnchor = true;
                     if (mI === 0 || mI === 4 || mI === 8 || mI === 12) isKickAnchor = true;
                     
-                    // JAVÍTÁS: Szinkópált lábdob variációk bevezetése a Skank beat-be!
-                    // D-Beat hatás
-                    if (complexity >= 0.60 && (mI === 3 || mI === 11)) isKickAnchor = true;
-                    // Sűrűbb galopp
-                    if (complexity >= 0.68 && (mI === 7 || mI === 15)) isKickAnchor = true;
+                    // Szélesebb Punk zónához igazított galopp-belépések
+                    if (complexity >= 0.68 && (mI === 3 || mI === 11)) isKickAnchor = true;
+                    if (complexity >= 0.77 && (mI === 7 || mI === 15)) isKickAnchor = true;
                 } else {
                     if (loudness < 0.35) {
                         isSnareAnchor = true; 
@@ -547,7 +549,6 @@
 
                 if (isSnareAnchor) {
                     sVel = drumVel;
-                    // Pörgetés finomítása, hogy ne legyen kása
                     if (isBlast && !isDeathcoreWall && loudness < 0.35 && mI % 2 !== 0) {
                         sVel = drumVel * 0.7; 
                     }
@@ -555,13 +556,15 @@
                 
                 if (isKickAnchor) kVel = drumVel;
 
-                if (!isHeavyBreakdown && !isDeathcoreWall && !isKickAnchor && !isSnareAnchor && complexity >= 0.10 && complexity < 0.75) {
+                // Dinamikus lábdob a Rock és Punk zónák alatt
+                if (!isHeavyBreakdown && !isDeathcoreWall && !isKickAnchor && !isSnareAnchor && complexity >= 0.15 && complexity < 0.85) {
                     if (mI % 2 === 0) {
-                        let p8 = Math.max(0, (complexity - 0.10) * 4.0); 
+                        // Finomított lábdob-sűrűsödés
+                        let p8 = Math.max(0, (complexity - 0.15) * 3.0); 
                         if (seededRandom() < p8) kVel = drumVel * 0.9;
                     } 
                     else {
-                        let p16 = Math.max(0, (complexity - 0.25) * 1.5);
+                        let p16 = Math.max(0, (complexity - 0.25) * 1.2);
                         if (fillAmount > 0.2 && seededRandom() < p16 * fillAmount * 0.2) {
                             kVel = kickGhostVel;
                         }
@@ -623,22 +626,17 @@
                 } 
                 else {
                     // RAW/HATE ZÓNA
-                    // JAVÍTÁS: Itt most már a Blast és Punk alatt is fixen 4 Crash van (minden negyeden), hogy keretezze a kalapálást!
                     if (mI % 4 === 0) cVel = cymbalVel; 
                 }
 
-                // Cintányér letisztítása extrém tempóknál
                 if (isBlast || isDeathcoreWall) {
                     if (loudness >= 0.75) {
-                        // Szigorúan 4 Crash az ütemben, a többi csend
                         if (mI % 4 !== 0) cVel = 0; 
                     } else {
-                        // Tight Tension / Snare roll zóna (halkabb részek lentebb)
                         if (mI % 2 !== 0) cVel = 0; 
                     }
                 }
                 
-                // Doom letisztítás 
                 if (!isHeavyBreakdown && isDoom && loudness < 0.5 && mI % 2 !== 0) cVel = 0;
 
                 groove['Kick'][i] = kVel;
@@ -960,8 +958,8 @@
         
         setTimeout(() => {
             const rect = xyPad.getBoundingClientRect();
-            // Start right at the Deathcore Wall to show it off
-            updateXY(rect.width * 1.0, rect.height * 0.0); 
+            // Start right in the middle "Sweet Spot" to show the wide Rock/Punk area
+            updateXY(rect.width * 0.5, rect.height * 0.4); 
         }, 100);
 
     </script>
