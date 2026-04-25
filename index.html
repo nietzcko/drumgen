@@ -290,7 +290,7 @@
 </head>
 <body>
 
-    <h1>Groove Generator <span class="version">v3.9 Prog. Breakdown</span></h1>
+    <h1>Groove Generator <span class="version">v4.0 Steady Doom</span></h1>
 
     <div class="controls-row">
         <button id="playBtn" class="main-btn">PLAY</button>
@@ -449,7 +449,7 @@
                     filter.connect(gainNode);
                     
                     let decay = type === 'OpenHH' ? 0.4 : 0.08;
-                    if (type === 'OpenHH' && velocity < 85) decay = 0.08; // Tight tension zárt lecsengés
+                    if (type === 'OpenHH' && velocity < 85) decay = 0.08; 
                     
                     gainNode.gain.exponentialRampToValueAtTime(0.001, time + decay);
                     noise.start(time);
@@ -508,29 +508,22 @@
                 let isKickAnchor = false;
 
                 if (isHeavyBreakdown) {
-                    // JAVÍTOTT PROGRESSZÍV BREAKDOWN
                     if (mI === 8) isSnareAnchor = true; 
                     if (mI === 0) isKickAnchor = true; 
                     
-                    // 8% felett bejön a lábdob a 3. stepre (index 2)
                     if (complexity >= 0.08 && mI === 2) isKickAnchor = true;
-                    // 16% felett bejön a lábdob a 15. stepre (index 14)
                     if (complexity >= 0.16 && mI === 14) isKickAnchor = true;
                 }
                 else if (isDoom) {
-                    // DOOM
                     if (mI === 8) isSnareAnchor = true;
                     if (mI === 0) isKickAnchor = true;
                 } else if (isRock) {
-                    // ROCK/GROOVE
                     if (mI === 4 || mI === 12) isSnareAnchor = true;
                     if (mI === 0 || mI === 8) isKickAnchor = true;
                 } else if (isPunk) {
-                    // PUNK 
                     if (mI === 2 || mI === 6 || mI === 10 || mI === 14) isSnareAnchor = true;
                     if (mI === 0 || mI === 4 || mI === 8 || mI === 12) isKickAnchor = true;
                 } else {
-                    // FILL / BLAST ZÓNA
                     if (loudness < 0.35) {
                         isSnareAnchor = true; 
                     } else {
@@ -548,7 +541,6 @@
                 
                 if (isKickAnchor) kVel = drumVel;
 
-                // --- LÁBDOB FOLYAMATOS SŰRŰSÖDÉSE A ROCK ZÓNÁBAN ---
                 if (!isHeavyBreakdown && !isKickAnchor && !isSnareAnchor && complexity >= 0.10 && complexity < 0.75) {
                     if (mI % 2 === 0) {
                         let p8 = Math.max(0, (complexity - 0.10) * 4.0); 
@@ -562,7 +554,6 @@
                     }
                 }
 
-                // --- GHOST NOTE-OK A PERGŐN ---
                 if (fillAmount > 0 && !isHeavyBreakdown) {
                     if (!isSnareAnchor && kVel === 0) {
                         let xCurve = Math.max(0, 1.0 - Math.abs(complexity - 0.4) * 2.5); 
@@ -575,14 +566,15 @@
                 // ==========================================
                 
                 if (isHeavyBreakdown) {
-                    // BREAKDOWN (Csak 1 és 3)
                     if (mI === 0 || mI === 8) cVel = cymbalVel;
                     else cVel = 0; 
                 }
                 else if (loudness < 0.25) {
                     // SPARSE/CALM
                     if (isDoom) {
-                        if (mI % 8 === 0) cVel = cymbalVel * 0.8;
+                        // JAVÍTVA: Minden második stepen (8-adokon) hi-hat a bal alsó sarokban!
+                        if (mI % 4 === 0) cVel = cymbalVel * 0.8;      // Negyedeken erősebb
+                        else if (mI % 2 === 0) cVel = cymbalVel * 0.5; // Köztes 8-adokon halkabb
                     } else {
                         if (mI % 4 === 0 && seededRandom() < (loudness * 4 + 0.3)) cVel = cymbalVel * 0.8;
                     }
@@ -590,7 +582,10 @@
                 else if (loudness < 0.5) {
                     // QUIET FILLS
                     if (isDoom) {
-                        if (mI % 4 === 0) cVel = cymbalVel * 0.8;
+                        // JAVÍTVA: Itt is marad a ketyegős 8-ad!
+                        if (mI % 4 === 0) cVel = cymbalVel;
+                        else if (mI % 2 === 0) cVel = cymbalVel * 0.7;
+                        else if (seededRandom() < fillAmount * 0.4) cVel = cymbalVel * 0.4;
                     } else {
                         if (mI % 4 === 0) cVel = cymbalVel;
                         else if (mI % 2 === 0) cVel = cymbalVel * 0.8;
@@ -618,12 +613,10 @@
                     }
                 } 
                 else {
-                    // RAW/HATE (CRASH ZÓNA - JAVÍTOTT ÁTMENET A BREAKDOWN UTÁN)
+                    // RAW/HATE
                     if (isPunk || isBlast) {
                         if (mI % 8 === 0) cVel = cymbalVel; 
                     } else {
-                        // isRock: Mivel a Breakdown (mI=0,8) átlépett a Rock zónába (isRock),
-                        // a Crash automatikusan átvált a 4 cines (mI=0,4,8,12) folyamatos ütésre!
                         if (mI % 4 === 0) cVel = cymbalVel; 
                     }
                 }
@@ -633,7 +626,8 @@
                     if (loudness >= 0.75 && mI % 4 !== 0) cVel = 0; 
                 }
                 
-                if (!isHeavyBreakdown && isDoom && loudness < 0.5 && mI % 4 !== 0) cVel = 0;
+                // Doom letisztítás (de csak ha nem a Steady Doom 8-ados zónájában vagyunk)
+                if (!isHeavyBreakdown && isDoom && loudness < 0.5 && mI % 2 !== 0) cVel = 0;
 
                 groove['Kick'][i] = kVel;
                 groove['Snare'][i] = sVel;
@@ -954,8 +948,8 @@
         
         setTimeout(() => {
             const rect = xyPad.getBoundingClientRect();
-            // Start right at the most empty, heavy breakdown!
-            updateXY(rect.width * 0.0, rect.height * 0.0); 
+            // Start at the bottom left to show off the new Steady Doom 8th note groove
+            updateXY(rect.width * 0.1, rect.height * 0.9); 
         }, 100);
 
     </script>
