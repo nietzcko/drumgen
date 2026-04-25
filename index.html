@@ -156,7 +156,7 @@
 
         .label {
             position: absolute;
-            font-size: 13px;
+            font-size: 12px;
             letter-spacing: 1px;
             pointer-events: none;
             color: #999;
@@ -273,7 +273,7 @@
 </head>
 <body>
 
-    <h1>Groove Generator <span class="version">v2.2 Seamless Axis</span></h1>
+    <h1>Groove Generator <span class="version">v2.3 Matrix</span></h1>
 
     <div class="controls-row">
         <button id="playBtn" class="main-btn">PLAY</button>
@@ -303,8 +303,8 @@
     </div>
 
     <div class="xy-wrapper">
-        <span class="label top">Hate</span>
-        <span class="label bottom">Calm</span>
+        <span class="label top">Hate (Raw)</span>
+        <span class="label bottom">Calm (Fills)</span>
         <span class="label left">Doom</span>
         <span class="label right">Blast</span>
         <div class="xy-pad" id="xyPad">
@@ -321,8 +321,8 @@
         let isPlaying = false;
         let bpm = 140;
         let totalSteps = 16;
-        let complexity = 0.5; // X Axis (Drums)
-        let loudness = 0.5;   // Y Axis (Cymbals)
+        let complexity = 0.5; // X Axis: Doom (0.0) to Blast (1.0)
+        let loudness = 0.5;   // Y Axis: Fills/Jazz (0.0) to Raw/Hate (1.0)
         let tiltEnabled = false;
         
         let currentStep = 0;
@@ -350,10 +350,10 @@
             }
         }
 
-        // Y tengely dönt a cin típusáról (Calm -> Hate)
         function getCymbalType() {
-            if (loudness < 0.35) return 'ClosedHH';
-            if (loudness < 0.75) return 'OpenHH';
+            if (loudness < 0.3) return 'Ride'; 
+            if (loudness < 0.5) return 'ClosedHH';
+            if (loudness < 0.8) return 'OpenHH';
             return 'Crash'; 
         }
 
@@ -404,7 +404,30 @@
                 let type = getCymbalType();
                 const noise = audioCtx.createBufferSource();
                 
-                if (type === 'Crash') {
+                if (type === 'Ride') {
+                    // Finom Ride Ping + Mosás alulra
+                    const ping = audioCtx.createOscillator();
+                    ping.type = 'sine';
+                    ping.frequency.setValueAtTime(3200, time);
+                    ping.connect(gainNode);
+                    ping.start(time);
+                    ping.stop(time + 0.1);
+
+                    const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 1.0, audioCtx.sampleRate);
+                    const output = buffer.getChannelData(0);
+                    for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
+                    noise.buffer = buffer;
+
+                    const filter = audioCtx.createBiquadFilter();
+                    filter.type = 'highpass';
+                    filter.frequency.value = 6000;
+                    noise.connect(filter);
+                    filter.connect(gainNode);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, time + 1.0);
+                    noise.start(time);
+                    
+                } else if (type === 'Crash') {
+                    // Nyers, erős Crash felülre
                     const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 1.5, audioCtx.sampleRate);
                     const output = buffer.getChannelData(0);
                     for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
@@ -422,6 +445,7 @@
                     noise.start(time);
                     
                 } else {
+                    // Hi-Hatok (Open/Closed) középre
                     const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.5, audioCtx.sampleRate);
                     const output = buffer.getChannelData(0);
                     for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
@@ -455,16 +479,20 @@
                 }
             }
 
-            let baseVel = Math.floor(70 + (loudness * 57));
-            let ghostVel = Math.floor(baseVel * 0.5);
-
             let zoneX = Math.floor(complexity * 25);
             let zoneY = Math.floor(loudness * 25);
             currentSeed = zoneX + (zoneY * 100); 
 
-            // FIX: Egy negyed (quarter note) stabilan MINDIG 4 lépés (16-od rács).
-            // Így megmarad a 3/4 vagy 7/8 lüktetése!
-            const Q = 4;
+            // Dinamika és Fillek (Y tengely)
+            let baseVel = Math.floor(60 + (loudness * 67)); // 60 -> 127
+            let ghostVel = Math.floor(baseVel * 0.45); 
+            // Fills Amount: 1.0 alul (sok fill), 0.0 felül (nyers, fill nélkül)
+            let fillAmount = 1.0 - Math.pow(loudness, 1.5); 
+
+            let Q = 4; // Negyedek stabil pozíciója
+            let H = 8; 
+            if (totalSteps < 8) { Q = 2; H = 4; }
+            let cType = getCymbalType();
 
             for(let i = 0; i < totalSteps; i++) {
                 let kVel = 0;
@@ -472,96 +500,107 @@
                 let cVel = 0;
 
                 // ==========================================
-                // X TENGELY (KICK & SNARE) - ORGANIKUS ÁTMENET
+                // X TENGELY (KICK & SNARE) - ORGANIKUS RITMUS
                 // ==========================================
                 
                 let isSnareAnchor = false;
                 let isKickAnchor = false;
 
-                if (complexity < 0.15) {
-                    // DOOM: Csak egyetlen pergő ütés (a sáv közepe felé lévő negyeden)
+                // Alap horonypontok
+                if (complexity < 0.15) { // Doom
                     let midQ = Math.floor(totalSteps / 8) * Q; 
                     if (midQ === 0 && totalSteps >= Q) midQ = Q;
                     if (i === midQ) isSnareAnchor = true;
                     if (i === 0) isKickAnchor = true;
-                } else {
-                    // STANDARD: Pergő a "kettes" és "négyes" negyedeken
+                } else { // Groove/Rock
                     if (i % (Q*2) === Q) isSnareAnchor = true;
-                    // Lábdob a "huzos" negyedeken (1 és 3)
                     if (i % (Q*2) === 0) isKickAnchor = true;
                 }
 
                 if (isSnareAnchor) sVel = baseVel;
                 if (isKickAnchor) kVel = baseVel;
 
-                // --- NYOLCADOK KITÖLTÉSE (i % 2 === 0) ---
-                if (i % 2 === 0 && !isSnareAnchor && !isKickAnchor) {
-                    // Lábdobok sűrűsödése (0.2 -> 0.6)
-                    let fill8Prob = Math.max(0, (complexity - 0.2) * 2.5);
-                    if (seededRandom() < fill8Prob) kVel = baseVel;
+                // --- Ghost Noteok & Szinkópák (Y TENGELY FÜGGVÉNYE) ---
+                if (fillAmount > 0) {
+                    // Pergő Fillek
+                    if (!isSnareAnchor && kVel === 0) {
+                        // Kicsit domború eloszlás (Középen több ghost, legszélein kevesebb)
+                        let xCurve = Math.max(0, 1.0 - Math.abs(complexity - 0.5) * 1.5);
+                        if (seededRandom() < fillAmount * xCurve * 0.8) sVel = ghostVel;
+                    }
                     
-                    // Nyolcadok átváltozása pergővé a Blastbeat felé (0.6 -> 1.0)
-                    let blast8Prob = Math.max(0, (complexity - 0.6) * 2.5);
-                    if (seededRandom() < blast8Prob) {
-                        sVel = baseVel;
-                        kVel = (seededRandom() < 0.5) ? ghostVel : 0; 
+                    // Lábdob Szinkópák (16-odokon)
+                    if (i % 2 !== 0 && !isSnareAnchor && sVel === 0) {
+                        if (seededRandom() < fillAmount * complexity * 0.7) {
+                            kVel = ghostVel * 1.2;
+                        }
                     }
                 }
 
-                // --- TIZENHATODOK KITÖLTÉSE (i % 2 !== 0) ---
-                if (i % 2 !== 0) {
-                    // Duplázó lábdobok fokozatos bejövetele (0.3 -> 0.8)
-                    let dbProb = Math.max(0, (complexity - 0.3) * 2.0);
-                    if (seededRandom() < dbProb) kVel = baseVel * 0.85;
-
-                    // Tiszta Blastbeat tizenhatodok (0.75 -> 1.0) - Váltott pergő
-                    let blast16Prob = Math.max(0, (complexity - 0.75) * 4.0);
-                    if (seededRandom() < blast16Prob) {
-                        sVel = baseVel;
-                        kVel = 0; // Kinyomja a lábdobot, igazi gépfegyver hatás
-                    }
-                    
-                    // Kísérő "ghost" pergők a középső zónában (0.3 -> 0.7)
-                    let ghostProb = Math.max(0, 1.0 - Math.abs(complexity - 0.5) * 4);
-                    if (kVel === 0 && sVel === 0 && seededRandom() < ghostProb * 0.4) {
-                        sVel = ghostVel;
+                // --- Lábdob Sűrűsödés (X TENGELY FÜGGVÉNYE) ---
+                if (i % 2 === 0 && !isKickAnchor && !isSnareAnchor) {
+                    let k8Prob = Math.max(0, (complexity - 0.2) * 2);
+                    if (seededRandom() < k8Prob) kVel = baseVel * 0.9;
+                }
+                
+                // Duplázó beépülése (16-odok)
+                let dbProb = Math.max(0, (complexity - 0.4) * 2.5);
+                if (dbProb > 0 && i % 2 !== 0) {
+                    if (seededRandom() < dbProb) {
+                        kVel = baseVel * 0.85;
+                        sVel = 0; // Kinyomja a ghostokat, ha beindul a gép
                     }
                 }
+
+                // --- Blastbeat Felülírás ---
+                let blastProb = Math.max(0, (complexity - 0.75) * 4.0);
+                if (blastProb > 0) {
+                    let isBlastKick = (i % 2 === 0);
+                    if (seededRandom() < blastProb) {
+                        kVel = isBlastKick ? baseVel : 0;
+                        sVel = !isBlastKick ? baseVel : 0;
+                        
+                        // Ha Jazzy/Calm Blastbeat (Y alul), legyen picit dinamikusabb a játék
+                        if (loudness < 0.4) {
+                            kVel = kVel ? baseVel * 0.7 : 0;
+                            sVel = sVel ? baseVel * 0.7 : 0;
+                        }
+                    }
+                }
+
+                // ==========================================
+                // Y TENGELY (CYMBAL) - STÍLUS & DENSITY
+                // ==========================================
+                
+                if (loudness < 0.3) {
+                    // JAZZ / CALM: Ride cintányér, "swingeres" játék
+                    if (i % Q === 0) cVel = baseVel;
+                    else if (i % 2 === 0 && seededRandom() < 0.7) cVel = baseVel * 0.6; // Nyolcadok picit halkabban
+                    else if (fillAmount > 0.5 && seededRandom() < fillAmount * 0.5) cVel = ghostVel * 0.5; // Apró pörgetések
+                } 
+                else if (loudness < 0.8) {
+                    // ROCK / GROOVE: Hi-Hat
+                    if (i % 2 === 0) cVel = baseVel; // Feszes nyolcadok
+                    else if (fillAmount > 0.2 && seededRandom() < fillAmount * 0.8) cVel = ghostVel; // 16-od tiri-tiri fillek
+                } 
+                else {
+                    // HATE / RAW: Nyers Crash
+                    if (i % Q === 0) cVel = baseVel; // Szigorúan csak negyedekre!
+                    // Ha nem vagyunk teljesen blastbeatben, de extrém hangos, bejöhetnek nyolcadok is
+                    else if (i % 2 === 0 && loudness > 0.9 && complexity < 0.8) cVel = baseVel * 0.8; 
+                }
+
+                // Blastbeat cintányér tisztítás
+                if (blastProb > 0.5) {
+                    if (cType === 'Crash' && i % Q !== 0) cVel = 0; // Crash blastnál csak negyeden!
+                    if (cType !== 'Crash' && i % 2 !== 0) cVel = 0; // Hats blastnál csak nyolcadon!
+                }
+                
+                // Doom cintányér tisztítás
+                if (complexity < 0.15 && i % Q !== 0) cVel = 0;
 
                 groove['Kick'][i] = kVel;
                 groove['Snare'][i] = sVel;
-
-
-                // ==========================================
-                // Y TENGELY (CYMBAL DENSITY) - CALM -> HATE
-                // ==========================================
-                
-                let cType = getCymbalType(); 
-
-                if (loudness < 0.25) {
-                    // CALM: Csak ritkás koccanások
-                    if (i % Q === 0 && seededRandom() < (loudness * 4)) cVel = baseVel;
-                } 
-                else if (loudness < 0.5) {
-                    // Alap negyedek, pici nyolcaddal
-                    if (i % Q === 0) cVel = baseVel;
-                    else if (i % 2 === 0 && seededRandom() < (loudness - 0.25) * 4) cVel = ghostVel;
-                } 
-                else if (loudness < 0.75) {
-                    // Nyitott lábcin: feszes nyolcadok, pici tizenhatoddal
-                    if (i % 2 === 0) cVel = baseVel;
-                    else if (seededRandom() < (loudness - 0.5) * 4) cVel = ghostVel;
-                } 
-                else {
-                    // HATE: Crash zúzás
-                    if (i % Q === 0) cVel = baseVel; // Minden negyeden Crash
-                    else if (i % 2 === 0 && seededRandom() < (loudness - 0.75) * 4) cVel = baseVel * 0.8; 
-                }
-
-                // Tisztítás: Ha Blastbeat van (X jobb), a Crash ne verjen minden tizenhatodon,
-                // mert az már zaj. Igazodik a páros ütésekhez.
-                if (complexity > 0.8 && cType === 'Crash' && i % 2 !== 0) cVel = 0;
-
                 groove['Cymbal'][i] = cVel;
             }
 
@@ -805,6 +844,7 @@
             
             let cymbalNote = 42; 
             let cType = getCymbalType();
+            if (cType === 'Ride') cymbalNote = 51; 
             if (cType === 'OpenHH') cymbalNote = 46;
             if (cType === 'Crash') cymbalNote = 49; 
 
@@ -869,8 +909,7 @@
         
         setTimeout(() => {
             const rect = xyPad.getBoundingClientRect();
-            // Start out simple, middle volume
-            updateXY(rect.width * 0.2, rect.height * 0.5);
+            updateXY(rect.width * 0.25, rect.height * 0.5);
         }, 100);
 
     </script>
