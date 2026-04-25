@@ -515,7 +515,6 @@
             if (isDeathcoreWall) {
                 isKick = true; if (mI % 2 === 0) isSnare = true;
             } else if (isDoom) {
-                // Doom kick: only complexity drives fills, loudness has NO effect on kick pattern
                 if (mI === 8) isSnare = true;
                 if (mI === 0) isKick = true;
                 if (complexity >= 0.07 && mI === 2) isKick = true;
@@ -524,48 +523,43 @@
                 if (complexity >= 0.21 && mI === 6) isKick = true;
                 if (complexity >= 0.24 && mI === 12) isKick = true;
             } else if (isRock) {
-                if (mI === 4 || mI === 12) isSnare = true; if (mI === 0 || mI === 8) isKick = true;
+                if (mI === 4 || mI === 12) isSnare = true;
+                if (mI === 0 || mI === 8) isKick = true;
             } else if (isPunk) {
-                if (mI % 4 === 2) isSnare = true; if (mI % 4 === 0) isKick = true;
+                if (mI % 4 === 2) isSnare = true;
+                if (mI % 4 === 0) isKick = true;
                 if (complexity >= 0.68 && (mI === 3 || mI === 11)) isKick = true;
                 if (complexity >= 0.80 && (mI === 7 || mI === 15)) isKick = true;
             } else {
-                if (loudness < 0.35) isSnare = true; else { if (mI % 2 !== 0) isSnare = true; if (mI % 2 === 0) isKick = true; }
+                // Blast: minden tizenhatod snare+kick felváltva
+                if (mI % 2 !== 0) isSnare = true;
+                if (mI % 2 === 0) isKick = true;
             }
 
             if (isDoom) {
-                // Doom cymbal: loudness vezérli a dinamikat
                 if (loudness < 0.35) {
-                    // Alul: sima nyolcad
                     if (mI % 2 === 0) cV = cymbalVel;
                 } else if (loudness < 0.65) {
-                    // Kozep: ghost note-os
                     if (mI % 4 === 0) cV = cymbalVel;
                     else if (mI % 2 === 0) cV = cymbalVel * 0.45;
                     else if (seededRandom() < 0.35) cV = cymbalVel * 0.25;
                 } else if (loudness < 0.85) {
-                    // Felso-kozep: suru ghost note-ok
                     if (mI % 4 === 0) cV = cymbalVel;
                     else if (mI % 2 === 0) cV = cymbalVel * 0.6;
                     else if (seededRandom() < 0.55) cV = cymbalVel * 0.3;
                 } else {
-                    // Teteje: nyers, csak foutes
                     if (mI % 4 === 0) cV = cymbalVel;
                 }
             } else if (loudness < 0.25) {
-                if (isDoom) { if (mI % 4 === 0) cV = cymbalVel * 0.8; else if (mI % 2 === 0) cV = cymbalVel * 0.5; }
-                else { if (mI % 4 === 0 && seededRandom() < (loudness * 4 + 0.3)) cV = cymbalVel * 0.8; }
+                if (mI % 4 === 0 && seededRandom() < (loudness * 4 + 0.3)) cV = cymbalVel * 0.8;
             } else if (loudness < 0.5) {
-                if (isDoom) { if (mI % 4 === 0) cV = cymbalVel; else if (mI % 2 === 0) cV = cymbalVel * 0.7; }
-                else { if (mI % 4 === 0) cV = cymbalVel; else if (mI % 2 === 0) cV = cymbalVel * 0.8; }
+                if (mI % 4 === 0) cV = cymbalVel;
+                else if (mI % 2 === 0) cV = cymbalVel * 0.8;
             } else if (loudness < 0.75) {
                 if (mI % 4 === 0) cV = Math.min(127, cymbalVel * 1.1);
-                else {
-                    let dens = isDoom ? 0.3 : 0.6;
-                    if (seededRandom() < dens) cV = cymbalVel * 0.35;
-                }
+                else if (seededRandom() < 0.6) cV = cymbalVel * 0.35;
             } else {
-                if (mI % 4 === 0) cV = cymbalVel; 
+                if (mI % 4 === 0) cV = cymbalVel;
             }
 
             if ((isBlast || isDeathcoreWall) && loudness >= 0.75 && mI % 4 !== 0) cV = 0;
