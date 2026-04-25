@@ -179,7 +179,7 @@
         .label.top { top: -22px; left: 50%; transform: translateX(-50%); color: var(--accent); }
         .label.bottom { bottom: -22px; left: 50%; transform: translateX(-50%); }
         .label.left { left: -50px; top: 50%; transform: translateY(-50%) rotate(-90deg); width: 80px; }
-        .label.right { right: -45px; top: 50%; transform: translateY(-50%) rotate(90deg); width: 80px; color: var(--accent); }
+        .label.right { right: -50px; top: 50%; transform: translateY(-50%) rotate(90deg); width: 80px; color: var(--accent); }
 
         .xy-pad {
             width: 100%;
@@ -290,7 +290,7 @@
 </head>
 <body>
 
-    <h1>Groove Generator <span class="version">v4.0 Steady Doom</span></h1>
+    <h1>Groove Generator <span class="version">v4.1 Cathartic Wall</span></h1>
 
     <div class="controls-row">
         <button id="playBtn" class="main-btn">PLAY</button>
@@ -323,7 +323,7 @@
         <span class="label top">Raw</span>
         <span class="label bottom">Sparse</span>
         <span class="label left">Break / Doom</span>
-        <span class="label right">Fill / Blast</span>
+        <span class="label right">Wall / Blast</span>
         <div class="xy-pad" id="xyPad">
             <div class="puck" id="puck"></div>
         </div>
@@ -492,7 +492,9 @@
             let isRock = complexity >= 0.25 && complexity < 0.55;
             let isPunk = complexity >= 0.55 && complexity < 0.75;
             let isBlast = complexity >= 0.75;
+            
             let isHeavyBreakdown = (isDoom && loudness >= 0.75);
+            let isDeathcoreWall = (isBlast && loudness >= 0.85); // AZ ÚJ KATARTIKUS ZÓNA
 
             for(let i = 0; i < totalSteps; i++) {
                 let kVel = 0;
@@ -510,9 +512,13 @@
                 if (isHeavyBreakdown) {
                     if (mI === 8) isSnareAnchor = true; 
                     if (mI === 0) isKickAnchor = true; 
-                    
                     if (complexity >= 0.08 && mI === 2) isKickAnchor = true;
                     if (complexity >= 0.16 && mI === 14) isKickAnchor = true;
+                }
+                else if (isDeathcoreWall) {
+                    // DEATHCORE WALL: Katartikus darálás (Mindenhol lábdob, nyolcadokon pergő)
+                    isKickAnchor = true; 
+                    if (mI % 2 === 0) isSnareAnchor = true;
                 }
                 else if (isDoom) {
                     if (mI === 8) isSnareAnchor = true;
@@ -521,8 +527,15 @@
                     if (mI === 4 || mI === 12) isSnareAnchor = true;
                     if (mI === 0 || mI === 8) isKickAnchor = true;
                 } else if (isPunk) {
+                    // PUNK ALAP 
                     if (mI === 2 || mI === 6 || mI === 10 || mI === 14) isSnareAnchor = true;
                     if (mI === 0 || mI === 4 || mI === 8 || mI === 12) isKickAnchor = true;
+                    
+                    // JAVÍTÁS: Szinkópált lábdob variációk bevezetése a Skank beat-be!
+                    // D-Beat hatás
+                    if (complexity >= 0.60 && (mI === 3 || mI === 11)) isKickAnchor = true;
+                    // Sűrűbb galopp
+                    if (complexity >= 0.68 && (mI === 7 || mI === 15)) isKickAnchor = true;
                 } else {
                     if (loudness < 0.35) {
                         isSnareAnchor = true; 
@@ -534,14 +547,15 @@
 
                 if (isSnareAnchor) {
                     sVel = drumVel;
-                    if (isBlast && loudness < 0.35 && mI % 2 !== 0) {
+                    // Pörgetés finomítása, hogy ne legyen kása
+                    if (isBlast && !isDeathcoreWall && loudness < 0.35 && mI % 2 !== 0) {
                         sVel = drumVel * 0.7; 
                     }
                 }
                 
                 if (isKickAnchor) kVel = drumVel;
 
-                if (!isHeavyBreakdown && !isKickAnchor && !isSnareAnchor && complexity >= 0.10 && complexity < 0.75) {
+                if (!isHeavyBreakdown && !isDeathcoreWall && !isKickAnchor && !isSnareAnchor && complexity >= 0.10 && complexity < 0.75) {
                     if (mI % 2 === 0) {
                         let p8 = Math.max(0, (complexity - 0.10) * 4.0); 
                         if (seededRandom() < p8) kVel = drumVel * 0.9;
@@ -554,7 +568,7 @@
                     }
                 }
 
-                if (fillAmount > 0 && !isHeavyBreakdown) {
+                if (fillAmount > 0 && !isHeavyBreakdown && !isDeathcoreWall) {
                     if (!isSnareAnchor && kVel === 0) {
                         let xCurve = Math.max(0, 1.0 - Math.abs(complexity - 0.4) * 2.5); 
                         if (seededRandom() < fillAmount * xCurve * 0.15) sVel = snareGhostVel;
@@ -570,19 +584,15 @@
                     else cVel = 0; 
                 }
                 else if (loudness < 0.25) {
-                    // SPARSE/CALM
                     if (isDoom) {
-                        // JAVÍTVA: Minden második stepen (8-adokon) hi-hat a bal alsó sarokban!
-                        if (mI % 4 === 0) cVel = cymbalVel * 0.8;      // Negyedeken erősebb
-                        else if (mI % 2 === 0) cVel = cymbalVel * 0.5; // Köztes 8-adokon halkabb
+                        if (mI % 4 === 0) cVel = cymbalVel * 0.8;      
+                        else if (mI % 2 === 0) cVel = cymbalVel * 0.5; 
                     } else {
                         if (mI % 4 === 0 && seededRandom() < (loudness * 4 + 0.3)) cVel = cymbalVel * 0.8;
                     }
                 } 
                 else if (loudness < 0.5) {
-                    // QUIET FILLS
                     if (isDoom) {
-                        // JAVÍTVA: Itt is marad a ketyegős 8-ad!
                         if (mI % 4 === 0) cVel = cymbalVel;
                         else if (mI % 2 === 0) cVel = cymbalVel * 0.7;
                         else if (seededRandom() < fillAmount * 0.4) cVel = cymbalVel * 0.4;
@@ -593,7 +603,6 @@
                     }
                 } 
                 else if (loudness < 0.75) {
-                    // TIGHT TENSION
                     if (mI % 4 === 0) {
                         cVel = Math.min(127, cymbalVel * 1.1);
                         
@@ -613,20 +622,23 @@
                     }
                 } 
                 else {
-                    // RAW/HATE
-                    if (isPunk || isBlast) {
-                        if (mI % 8 === 0) cVel = cymbalVel; 
-                    } else {
-                        if (mI % 4 === 0) cVel = cymbalVel; 
-                    }
+                    // RAW/HATE ZÓNA
+                    // JAVÍTÁS: Itt most már a Blast és Punk alatt is fixen 4 Crash van (minden negyeden), hogy keretezze a kalapálást!
+                    if (mI % 4 === 0) cVel = cymbalVel; 
                 }
 
-                if (!isHeavyBreakdown && isBlast) {
-                    if (mI % 2 !== 0) cVel = 0; 
-                    if (loudness >= 0.75 && mI % 4 !== 0) cVel = 0; 
+                // Cintányér letisztítása extrém tempóknál
+                if (isBlast || isDeathcoreWall) {
+                    if (loudness >= 0.75) {
+                        // Szigorúan 4 Crash az ütemben, a többi csend
+                        if (mI % 4 !== 0) cVel = 0; 
+                    } else {
+                        // Tight Tension / Snare roll zóna (halkabb részek lentebb)
+                        if (mI % 2 !== 0) cVel = 0; 
+                    }
                 }
                 
-                // Doom letisztítás (de csak ha nem a Steady Doom 8-ados zónájában vagyunk)
+                // Doom letisztítás 
                 if (!isHeavyBreakdown && isDoom && loudness < 0.5 && mI % 2 !== 0) cVel = 0;
 
                 groove['Kick'][i] = kVel;
@@ -948,8 +960,8 @@
         
         setTimeout(() => {
             const rect = xyPad.getBoundingClientRect();
-            // Start at the bottom left to show off the new Steady Doom 8th note groove
-            updateXY(rect.width * 0.1, rect.height * 0.9); 
+            // Start right at the Deathcore Wall to show it off
+            updateXY(rect.width * 1.0, rect.height * 0.0); 
         }, 100);
 
     </script>
