@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Web Drummer Groove Generator - Metal Edition</title>
+    <title>Web Drummer - Organic Metal Edition</title>
     <style>
         :root {
             --bg-color: #1a1a1a;
@@ -141,8 +141,8 @@
         }
         .label.top { top: -20px; left: 50%; transform: translateX(-50%); }
         .label.bottom { bottom: -20px; left: 50%; transform: translateX(-50%); }
-        .label.left { left: -50px; top: 50%; transform: translateY(-50%) rotate(-90deg); width: 60px; line-height: 1.1; }
-        .label.right { right: -60px; top: 50%; transform: translateY(-50%) rotate(90deg); width: 80px; line-height: 1.1; }
+        .label.left { left: -50px; top: 50%; transform: translateY(-50%) rotate(-90deg); width: 60px; }
+        .label.right { right: -60px; top: 50%; transform: translateY(-50%) rotate(90deg); width: 80px; }
 
         .xy-pad {
             width: 100%;
@@ -163,7 +163,7 @@
             background-image: 
                 linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
-            background-size: 14.28% 10%; /* 7 oszlop, 10 sor */
+            background-size: 10% 10%; 
             pointer-events: none;
         }
 
@@ -186,7 +186,7 @@
             max-width: 400px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 10px;
             margin-bottom: 30px;
         }
 
@@ -198,7 +198,7 @@
 
         .row-label {
             width: 40px;
-            font-size: 11px;
+            font-size: 12px;
             color: #aaa;
             text-align: right;
             padding-right: 10px;
@@ -213,7 +213,7 @@
 
         .step {
             width: 15px;
-            height: 22px;
+            height: 25px;
             background-color: var(--step-bg);
             border-radius: 3px;
             transition: background-color 0.1s, opacity 0.1s;
@@ -243,7 +243,7 @@
 </head>
 <body>
 
-    <h1>Groove Generator <span class="version">v1.4 Metal</span></h1>
+    <h1>Groove Generator <span class="version">v1.5 Organic</span></h1>
 
     <div class="controls">
         <button id="playBtn" class="main-btn">Play</button>
@@ -251,17 +251,17 @@
             <div class="bpm-label">TEMPO (BPM)</div>
             <div class="bpm-controls">
                 <button id="bpmMinus" class="small-btn">-</button>
-                <input type="number" id="bpmInput" value="130" min="40" max="300">
+                <input type="number" id="bpmInput" value="140" min="40" max="300">
                 <button id="bpmPlus" class="small-btn">+</button>
             </div>
         </div>
     </div>
 
     <div class="xy-wrapper">
-        <span class="label top">Open HH</span>
+        <span class="label top">Ride</span>
         <span class="label bottom">Closed HH</span>
-        <span class="label left">Doom / Half-time</span>
-        <span class="label right">Thrash / Blastbeat</span>
+        <span class="label left">Simple</span>
+        <span class="label right">Complex -> Blast</span>
         <div class="xy-pad" id="xyPad">
             <div class="puck" id="puck"></div>
         </div>
@@ -274,7 +274,7 @@
 
     <script>
         let isPlaying = false;
-        let bpm = 130;
+        let bpm = 140;
         let complexity = 0.5;
         let loudness = 0.5;
         
@@ -284,10 +284,10 @@
         let scheduleAheadTime = 0.1; 
         let timerID;
 
-        const instruments = ['OpenHH', 'HiHat', 'Snare', 'Kick'];
+        // Vissza 3 sávra az egyszerűség kedvéért (a Cymbal hangja majd dinamikusan változik)
+        const instruments = ['Cymbal', 'Snare', 'Kick'];
         let groove = {
-            'OpenHH': new Array(16).fill(0),
-            'HiHat': new Array(16).fill(0),
+            'Cymbal': new Array(16).fill(0),
             'Snare': new Array(16).fill(0),
             'Kick': new Array(16).fill(0)
         };
@@ -304,12 +304,18 @@
             }
         }
 
+        // Döntéshozó: Milyen cintányér szóljon az Y tengely alapján?
+        function getCymbalType() {
+            if (loudness < 0.35) return 'ClosedHH';
+            if (loudness < 0.70) return 'OpenHH';
+            return 'Ride';
+        }
+
         function playSound(inst, velocity, time) {
             if (!audioCtx) return;
             
             let gainMultiplier = 0.4 + (loudness * 0.6); 
             const vol = (velocity / 127) * gainMultiplier;
-            
             const gainNode = audioCtx.createGain();
             gainNode.gain.setValueAtTime(vol, time);
             gainNode.connect(audioCtx.destination);
@@ -348,41 +354,49 @@
                 noise.start(time);
                 osc.stop(time + 0.25);
                 
-            } else if (inst === 'HiHat') {
+            } else if (inst === 'Cymbal') {
+                let type = getCymbalType();
                 const noise = audioCtx.createBufferSource();
-                const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.1, audioCtx.sampleRate);
-                const output = buffer.getChannelData(0);
-                for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
-                noise.buffer = buffer;
                 
-                const filter = audioCtx.createBiquadFilter();
-                filter.type = 'highpass';
-                filter.frequency.value = 7000;
-                
-                noise.connect(filter);
-                filter.connect(gainNode);
-                gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.08); 
-                
-                noise.start(time);
-                
-            } else if (inst === 'OpenHH') {
-                const noise = audioCtx.createBufferSource();
-                const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.5, audioCtx.sampleRate);
-                const output = buffer.getChannelData(0);
-                for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
-                noise.buffer = buffer;
+                if (type === 'Ride') {
+                    // Ride ping + wash
+                    const ping = audioCtx.createOscillator();
+                    ping.type = 'sine';
+                    ping.frequency.setValueAtTime(3200, time);
+                    ping.connect(gainNode);
+                    ping.start(time);
+                    ping.stop(time + 0.1);
 
-                const filter = audioCtx.createBiquadFilter();
-                filter.type = 'highpass';
-                filter.frequency.value = 5000; 
+                    const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 1.0, audioCtx.sampleRate);
+                    const output = buffer.getChannelData(0);
+                    for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
+                    noise.buffer = buffer;
 
-                noise.connect(filter);
-                filter.connect(gainNode);
-                
-                gainNode.gain.setValueAtTime(vol * 0.8, time);
-                gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.4); 
-                
-                noise.start(time);
+                    const filter = audioCtx.createBiquadFilter();
+                    filter.type = 'highpass';
+                    filter.frequency.value = 6000;
+                    noise.connect(filter);
+                    filter.connect(gainNode);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, time + 1.0);
+                    noise.start(time);
+                    
+                } else {
+                    // HiHats
+                    const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.5, audioCtx.sampleRate);
+                    const output = buffer.getChannelData(0);
+                    for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
+                    noise.buffer = buffer;
+
+                    const filter = audioCtx.createBiquadFilter();
+                    filter.type = 'highpass';
+                    filter.frequency.value = type === 'OpenHH' ? 5000 : 7000;
+                    noise.connect(filter);
+                    filter.connect(gainNode);
+                    
+                    let decay = type === 'OpenHH' ? 0.4 : 0.08;
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, time + decay);
+                    noise.start(time);
+                }
             }
         }
 
@@ -392,110 +406,92 @@
             return x - Math.floor(x);
         }
 
+        // FOLYTONOS ORGANIKUS GENERÁTOR
         function generateGroove() {
             for(let inst in groove) groove[inst].fill(0);
 
             let baseVel = Math.floor(70 + (loudness * 57));
             let ghostVel = Math.floor(baseVel * 0.5);
 
-            let zoneX = Math.floor(complexity * 15);
-            let zoneY = Math.floor(loudness * 10);
+            // Rács a stabilitásért
+            let zoneX = Math.floor(complexity * 20);
+            let zoneY = Math.floor(loudness * 20);
             currentSeed = zoneX + (zoneY * 100); 
 
-            // Stílus index meghatározása (0-tól 6-ig)
-            let styleIndex = Math.floor(complexity * 6.99); 
+            // Blastbeat átmeneti tényező (0.75-től 1.0-ig szépen felerősödik)
+            let blastFactor = Math.max(0, (complexity - 0.75) / 0.25);
 
-            // --- 1. CINTÁNYÉROK ---
-            let cymbalRhythm = 2; // Alap: Nyolcadok
-            if (styleIndex === 0) cymbalRhythm = 4; // Negyedek
-            if (styleIndex >= 4) cymbalRhythm = 2; 
-            if (styleIndex === 6) cymbalRhythm = 1; // 16-odok
+            for(let i = 0; i < 16; i++) {
+                
+                // --- KICK ---
+                let kVel = 0;
+                if (i === 0) kVel = baseVel;
+                else if (i === 8 && complexity > 0.1) kVel = baseVel;
+                else {
+                    // Szinkópák esélye nő a komplexitással
+                    let prob = complexity * 0.8;
+                    if (i % 2 !== 0) prob *= 0.4; // Tizenhatodokon ritkább
+                    if (seededRandom() < prob) kVel = (i % 2 !== 0) ? ghostVel : baseVel;
+                }
 
-            for (let i = 0; i < 16; i += cymbalRhythm) {
-                let isOpen = false;
-                if (loudness > 0.8) isOpen = true;
-                else if (loudness > 0.4 && (i % 4 === 0)) isOpen = true;
-                else if (seededRandom() < (loudness * 0.5)) isOpen = true;
-
-                let targetCymbal = isOpen ? 'OpenHH' : 'HiHat';
-                groove[targetCymbal][i] = (i % 4 === 0) ? baseVel : ghostVel + 10;
-            }
-
-            // --- 2. LÁBDOB ÉS PERGŐ (Zónák szerint) ---
-            switch(styleIndex) {
-                case 0: 
-                    // Half-time / Doom: Pergő csak a 3. negyeden
-                    groove['Kick'][0] = baseVel;
-                    if (seededRandom() > 0.5) groove['Kick'][2] = ghostVel;
-                    groove['Snare'][8] = baseVel; 
-                    if (seededRandom() > 0.6) groove['Kick'][14] = baseVel;
-                    break;
-
-                case 1: 
-                    // Standard Rock: Pergő 2 és 4
-                    groove['Kick'][0] = baseVel;
-                    if (seededRandom() > 0.3) groove['Kick'][8] = baseVel;
-                    groove['Snare'][4] = baseVel;
-                    groove['Snare'][12] = baseVel;
-                    if (seededRandom() > 0.7) groove['Kick'][10] = baseVel;
-                    break;
-
-                case 2: 
-                    // Groove Metal: Szinkópák
-                    groove['Kick'][0] = baseVel;
-                    groove['Kick'][3] = baseVel;
-                    if (seededRandom() > 0.4) groove['Kick'][8] = baseVel;
-                    groove['Kick'][10] = baseVel;
-                    groove['Snare'][4] = baseVel;
-                    groove['Snare'][12] = baseVel;
-                    groove['Snare'][7] = ghostVel; 
-                    if (seededRandom() > 0.5) groove['Snare'][15] = ghostVel;
-                    break;
-
-                case 3: 
-                    // Djent / Poliritmia
-                    groove['Snare'][4] = baseVel;
-                    groove['Snare'][12] = baseVel;
-                    [0, 3, 6, 9, 14].forEach(pos => {
-                        if (seededRandom() < 0.85) groove['Kick'][pos] = baseVel;
-                    });
-                    groove['Snare'][10] = ghostVel;
-                    break;
-
-                case 4: 
-                    // Fast Punk / Thrash: Double time! Pergő minden "és"-en
-                    groove['Kick'][0] = baseVel;
-                    groove['Kick'][4] = baseVel;
-                    groove['Kick'][8] = baseVel;
-                    groove['Kick'][12] = baseVel;
-                    groove['Snare'][2] = baseVel;
-                    groove['Snare'][6] = baseVel;
-                    groove['Snare'][10] = baseVel;
-                    groove['Snare'][14] = baseVel;
-                    if (seededRandom() > 0.5) groove['Kick'][15] = ghostVel;
-                    break;
-
-                case 5: 
-                    // Duplázó: Folyamatos lábdob darálás
-                    groove['Snare'][4] = baseVel;
-                    groove['Snare'][12] = baseVel;
-                    for(let i=0; i<16; i++) {
-                        if (i !== 4 && i !== 12) groove['Kick'][i] = baseVel;
+                // Blastbeat transzformáció: Lábdob a páros ütéseken (0, 2, 4...)
+                if (blastFactor > 0) {
+                    if (i % 2 === 0) {
+                        if (seededRandom() < blastFactor) kVel = baseVel;
+                    } else {
+                        // Törli a páratlan lábdobokat a tisztább darálásért
+                        if (seededRandom() < blastFactor) kVel = 0;
                     }
-                    break;
+                }
+                groove['Kick'][i] = kVel;
 
-                case 6: 
-                    // Blastbeat: Váltott darálás mindenen
-                    for(let i=0; i<16; i++) {
-                        if (i % 2 === 0) {
+                // --- SNARE ---
+                let sVel = 0;
+                if (i === 4 || i === 12) {
+                    sVel = baseVel; // Klasszikus 2 és 4
+                } else {
+                    // Ghost note-ok
+                    let prob = Math.max(0, complexity - 0.2) * 0.7;
+                    if (seededRandom() < prob && kVel === 0) sVel = ghostVel;
+                }
+
+                // Blastbeat transzformáció: Pergő a páratlan ütéseken (1, 3, 5...)
+                if (blastFactor > 0) {
+                    if (i % 2 !== 0) {
+                        if (seededRandom() < blastFactor) sVel = baseVel;
+                    } else {
+                        // Törli a ghost note-okat a blast alatt
+                        if (i !== 4 && i !== 12 && seededRandom() < blastFactor) sVel = 0;
+                    }
+                    
+                    // A teljes blast-nál a 2 és 4-es pergő helyét átveszi a lábdob
+                    if ((i === 4 || i === 12) && blastFactor > 0.5) {
+                        if (seededRandom() < (blastFactor - 0.5) * 2) {
+                            sVel = 0;
                             groove['Kick'][i] = baseVel;
-                            groove['Snare'][i] = ghostVel;
-                        } else {
-                            groove['Kick'][i] = ghostVel;
-                            groove['Snare'][i] = baseVel;
                         }
                     }
-                    break;
+                }
+                groove['Snare'][i] = sVel;
+
+                // --- CYMBAL ---
+                let cVel = 0;
+                let isEighth = (i % 2 === 0);
+                
+                if (isEighth) {
+                    cVel = baseVel;
+                } else {
+                    // 16-odok esélye nő (főleg ha zárt lábcin van)
+                    if (complexity > 0.3 && loudness < 0.6 && seededRandom() < complexity) {
+                        cVel = ghostVel;
+                    }
+                }
+
+                // Blast alatt a cintányér ritkítás (csak negyedeken vagy nyolcadokon)
+                if (blastFactor > 0.6 && i % 2 !== 0) cVel = 0;
+                if (blastFactor > 0.9 && i % 4 !== 0 && loudness > 0.7) cVel = 0; // Ride blastnál általában csak negyedeket ütnek
+
+                groove['Cymbal'][i] = cVel;
             }
 
             updateSequencerVisuals();
@@ -511,7 +507,7 @@
                 
                 const label = document.createElement('div');
                 label.className = 'row-label';
-                label.innerText = inst === 'OpenHH' ? 'OH' : (inst === 'HiHat' ? 'CH' : (inst === 'Snare' ? 'SN' : 'KD'));
+                label.innerText = inst === 'Cymbal' ? 'CY' : (inst === 'Snare' ? 'SN' : 'KD');
                 row.appendChild(label);
 
                 const stepsDiv = document.createElement('div');
@@ -657,8 +653,7 @@
         document.getElementById('downloadMidiBtn').addEventListener('click', () => {
             const TICKS_PER_BEAT = 120;
             const TICKS_PER_16TH = TICKS_PER_BEAT / 4;
-            const midiNotes = { 'Kick': 36, 'Snare': 38, 'HiHat': 42, 'OpenHH': 46 };
-
+            
             let trackEvents = [];
             const microsecondsPerBeat = Math.round(60000000 / bpm);
             trackEvents.push(0x00, 0xFF, 0x51, 0x03, 
@@ -667,6 +662,15 @@
                 microsecondsPerBeat & 0xFF);
 
             let eventsList = [];
+            
+            // Meghatározzuk melyik cintányér hangjegyet használjuk az Y alapján
+            let cymbalNote = 42; // Closed HH
+            let cType = getCymbalType();
+            if (cType === 'OpenHH') cymbalNote = 46;
+            if (cType === 'Ride') cymbalNote = 51;
+
+            const midiNotes = { 'Kick': 36, 'Snare': 38, 'Cymbal': cymbalNote };
+
             for (let step = 0; step < 16; step++) {
                 instruments.forEach(inst => {
                     const vel = groove[inst][step];
@@ -713,7 +717,7 @@
             const a = document.createElement('a');
             a.style.display = 'none';
             a.href = url;
-            a.download = `metal_groove_${bpm}bpm.mid`;
+            a.download = `organic_metal_${bpm}bpm.mid`;
             document.body.appendChild(a);
             a.click();
             setTimeout(() => {
@@ -727,7 +731,7 @@
         
         setTimeout(() => {
             const rect = xyPad.getBoundingClientRect();
-            // Indulás standard rock pozícióból (középtájon balra)
+            // Indulás standard rock pozícióból
             updateXY(rect.width * 0.25, rect.height * 0.5);
         }, 100);
 
