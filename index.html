@@ -290,7 +290,7 @@
 </head>
 <body>
 
-    <h1>Groove Generator <span class="version">v3.6 Step Cutter</span></h1>
+    <h1>Groove Generator <span class="version">v3.7 Tight Tension</span></h1>
 
     <div class="controls-row">
         <button id="playBtn" class="main-btn">PLAY</button>
@@ -429,7 +429,6 @@
                     const filter = audioCtx.createBiquadFilter();
                     filter.type = 'highpass';
                     filter.frequency.value = 4000; 
-                    
                     noise.connect(filter);
                     filter.connect(gainNode);
                     
@@ -449,7 +448,11 @@
                     noise.connect(filter);
                     filter.connect(gainNode);
                     
+                    // INTELLIGENS LÁBCIN: Ha a zóna OpenHH, de az ütés halk (ghost note), 
+                    // akkor a lecsengést azonnal rövidre vágjuk, hogy feszes maradjon a hangzás!
                     let decay = type === 'OpenHH' ? 0.4 : 0.08;
+                    if (type === 'OpenHH' && velocity < 85) decay = 0.08; 
+                    
                     gainNode.gain.exponentialRampToValueAtTime(0.001, time + decay);
                     noise.start(time);
                 }
@@ -561,7 +564,7 @@
                 }
 
                 // ==========================================
-                // Y TENGELY
+                // Y TENGELY - ÚJ "TIGHT TENSION" ZÓNA
                 // ==========================================
                 
                 if (isHeavyBreakdown) {
@@ -577,8 +580,15 @@
                     else if (seededRandom() < fillAmount * 0.6) cVel = cymbalVel * 0.5;
                 } 
                 else if (loudness < 0.75) {
-                    if (i % 2 === 0) cVel = cymbalVel; 
-                    else if (seededRandom() < fillAmount * 0.8) cVel = cymbalVel * 0.7; 
+                    // TIGHT TENSION: Erős hangsúly a negyedeken, sűrű de nagyon halk 16-odok közötte
+                    if (i % i4 === 0) {
+                        cVel = Math.min(127, cymbalVel * 1.1); // Erős ütés
+                    } else {
+                        let density = 0.5 + (fillAmount * 0.5); // Egyre sűrűbb, ahogy mész felfelé
+                        if (seededRandom() < density) {
+                            cVel = cymbalVel * 0.35; // De nagyon halk! Így ketyegős marad.
+                        }
+                    }
                 } 
                 else {
                     if (complexity >= 0.75) {
@@ -727,12 +737,10 @@
         const btnStepsMinus = document.getElementById('stepsMinus');
         const btnStepsPlus = document.getElementById('stepsPlus');
 
-        // ==== ÚJ LOGIKA A LÉPÉSEK ÁLLÍTÁSÁHOZ ====
         function updateSteps(newVal) {
             totalSteps = Math.max(2, Math.min(32, newVal));
             stepsInput.value = totalSteps;
 
-            // Csak levágjuk vagy kibővítjük csenddel a groove-ot, nincs újragenerálás!
             for(let inst in groove) {
                 if (groove[inst].length > totalSteps) {
                     groove[inst] = groove[inst].slice(0, totalSteps);
@@ -742,12 +750,10 @@
                 }
             }
 
-            // Ha épp egy olyan lépésen vagyunk, amit levágtunk, visszaugrunk az elejére
             if (currentStep >= totalSteps) {
                 currentStep = 0;
             }
 
-            // Hamis flaget adunk át, így csak a DOM épül újra, de nem fut le a generateGroove
             initSequencer(false); 
         }
 
@@ -860,20 +866,25 @@
                 microsecondsPerBeat & 0xFF);
 
             let eventsList = [];
-            
-            let cymbalNote = 42; 
             let cType = getCymbalType();
-            if (cType === 'OpenHH') cymbalNote = 46;
-            if (cType === 'Crash') cymbalNote = 49; 
-
-            const midiNotes = { 'Kick': 36, 'Snare': 38, 'Cymbal': cymbalNote };
 
             for (let step = 0; step < totalSteps; step++) {
                 instruments.forEach(inst => {
                     const vel = groove[inst][step];
                     if (vel > 0) {
-                        eventsList.push({ step: step, type: 0x99, note: midiNotes[inst], vel: vel });
-                        eventsList.push({ step: step + 0.9, type: 0x89, note: midiNotes[inst], vel: 0 });
+                        let note = 36; // Kick
+                        if (inst === 'Snare') note = 38;
+                        if (inst === 'Cymbal') {
+                            // Dinamikus MIDI: a halk ütéseket zárt lábcinként exportáljuk!
+                            if (cType === 'Crash') note = 49;
+                            else if (cType === 'OpenHH') {
+                                note = vel < 85 ? 42 : 46; 
+                            }
+                            else note = 42; // ClosedHH
+                        }
+                        
+                        eventsList.push({ step: step, type: 0x99, note: note, vel: vel });
+                        eventsList.push({ step: step + 0.9, type: 0x89, note: note, vel: 0 });
                     }
                 });
             }
@@ -927,7 +938,8 @@
         
         setTimeout(() => {
             const rect = xyPad.getBoundingClientRect();
-            updateXY(rect.width * 0.35, rect.height * 0.5);
+            // Mutassuk meg rögtön az új groove-ot!
+            updateXY(rect.width * 0.5, rect.height * 0.4); 
         }, 100);
 
     </script>
