@@ -290,7 +290,7 @@
 </head>
 <body>
 
-    <h1>Groove Generator <span class="version">v3.7 Tight Tension</span></h1>
+    <h1>Groove Generator <span class="version">v3.8 Master Grid</span></h1>
 
     <div class="controls-row">
         <button id="playBtn" class="main-btn">PLAY</button>
@@ -448,10 +448,8 @@
                     noise.connect(filter);
                     filter.connect(gainNode);
                     
-                    // INTELLIGENS LÁBCIN: Ha a zóna OpenHH, de az ütés halk (ghost note), 
-                    // akkor a lecsengést azonnal rövidre vágjuk, hogy feszes maradjon a hangzás!
                     let decay = type === 'OpenHH' ? 0.4 : 0.08;
-                    if (type === 'OpenHH' && velocity < 85) decay = 0.08; 
+                    if (type === 'OpenHH' && velocity < 85) decay = 0.08; // Tight tension zárt lecsengés
                     
                     gainNode.gain.exponentialRampToValueAtTime(0.001, time + decay);
                     noise.start(time);
@@ -466,6 +464,7 @@
         }
 
         function generateGroove() {
+            // Arrays (hosszúság = aktuális steps)
             for(let inst in groove) {
                 if(groove[inst].length !== totalSteps) {
                     groove[inst] = new Array(totalSteps).fill(0);
@@ -474,14 +473,10 @@
                 }
             }
 
+            // A Seed fixálása, hogy a rövidített loopok konzisztensek maradjanak!
             let zoneX = Math.floor(complexity * 25);
             let zoneY = Math.floor(loudness * 25);
             currentSeed = zoneX + (zoneY * 100); 
-
-            let i2 = Math.floor(totalSteps / 2); 
-            let i4 = Math.floor(totalSteps / 4); 
-            if (i4 === 0) i4 = 1;
-            if (i2 === 0) i2 = 2;
 
             let drumVel = loudness >= 0.5 ? Math.floor(100 + (loudness - 0.5) * 54) : Math.floor(80 + (loudness * 40));
             let cymbalVel = Math.floor(50 + (loudness * 77)); 
@@ -495,56 +490,71 @@
             else if (loudness < 0.75) fillAmount = 1; 
             else fillAmount = Math.max(0, 1.0 - (loudness - 0.75) * 4); 
 
-            let cType = getCymbalType();
-            let isHeavyBreakdown = (complexity < 0.20 && loudness >= 0.75);
+            // ==========================================
+            // LOGIKAI HATÁROK (Gyorsabban jön a zúzás!)
+            // ==========================================
+            let isDoom = complexity < 0.25;
+            let isRock = complexity >= 0.25 && complexity < 0.55;
+            let isPunk = complexity >= 0.55 && complexity < 0.75;
+            let isBlast = complexity >= 0.75;
+            let isHeavyBreakdown = (isDoom && loudness >= 0.75);
 
             for(let i = 0; i < totalSteps; i++) {
                 let kVel = 0;
                 let sVel = 0;
                 let cVel = 0;
 
+                // MÁTRIX MATEK: Minden szigorúan a 16-os rácsra van rögzítve!
+                // Így a STEPS érték pusztán "levágja" a loopot, nem borítja fel a hangsúlyokat.
+                let mI = i % 16; 
+
                 // ==========================================
-                // X TENGELY
+                // X TENGELY (Dobok rögzítése a 16-os rácsra)
                 // ==========================================
-                
                 let isSnareAnchor = false;
                 let isKickAnchor = false;
 
                 if (isHeavyBreakdown) {
-                    if (i === i2) isSnareAnchor = true; 
-                    if (i === 0 || i === 2) isKickAnchor = true; 
-                    if (i === 5 || i === 11 || i === 12) isKickAnchor = true;
+                    if (mI === 8) isSnareAnchor = true; 
+                    if (mI === 0 || mI === 2) isKickAnchor = true; 
+                    if (mI === 5 || mI === 11 || mI === 12) isKickAnchor = true;
                 }
-                else if (complexity < 0.30) {
-                    if (i === i2) isSnareAnchor = true;
-                    if (i === 0) isKickAnchor = true;
-                } else if (complexity < 0.65) {
-                    if (i % (i4 * 2) === i4) isSnareAnchor = true;
-                    if (i % (i4 * 2) === 0) isKickAnchor = true;
-                } else if (complexity < 0.85) {
-                    let halfQ = Math.floor(i4 / 2);
-                    if (i % i4 === halfQ) isSnareAnchor = true;
-                    if (i % i4 === 0) isKickAnchor = true;
+                else if (isDoom) {
+                    // DOOM (1 pergő középen)
+                    if (mI === 8) isSnareAnchor = true;
+                    if (mI === 0) isKickAnchor = true;
+                } else if (isRock) {
+                    // ROCK/GROOVE (Pergő a 4. és 12. 16-odon -> 2-es és 4-es leütés)
+                    if (mI === 4 || mI === 12) isSnareAnchor = true;
+                    if (mI === 0 || mI === 8) isKickAnchor = true;
+                } else if (isPunk) {
+                    // PUNK (Dupla tempó, pergő minden offbeaten)
+                    if (mI === 2 || mI === 6 || mI === 10 || mI === 14) isSnareAnchor = true;
+                    if (mI === 0 || mI === 4 || mI === 8 || mI === 12) isKickAnchor = true;
                 } else {
+                    // FILL / BLAST ZÓNA
                     if (loudness < 0.35) {
+                        // Jobb Alul: 16-od PERGŐ PÖRGETÉS
                         isSnareAnchor = true; 
                     } else {
-                        if (i % 2 !== 0) isSnareAnchor = true; 
-                        if (i % 2 === 0) isKickAnchor = true;  
+                        // Jobb Fent: VÁLTAKOZÓ BLASTBEAT
+                        if (mI % 2 !== 0) isSnareAnchor = true; 
+                        if (mI % 2 === 0) isKickAnchor = true;  
                     }
                 }
 
                 if (isSnareAnchor) {
                     sVel = drumVel;
-                    if (complexity >= 0.85 && loudness < 0.35 && i % 2 !== 0) {
-                        sVel = drumVel * 0.7; 
+                    if (isBlast && loudness < 0.35 && mI % 2 !== 0) {
+                        sVel = drumVel * 0.7; // Pörgetés finomítás
                     }
                 }
                 
                 if (isKickAnchor) kVel = drumVel;
 
-                if (!isHeavyBreakdown && !isKickAnchor && !isSnareAnchor && complexity >= 0.10 && complexity < 0.85) {
-                    if (i % 2 === 0) {
+                // --- LÁBDOB FOLYAMATOS SŰRŰSÖDÉSE A ROCK ZÓNÁBAN ---
+                if (!isHeavyBreakdown && !isKickAnchor && !isSnareAnchor && complexity >= 0.10 && complexity < 0.75) {
+                    if (mI % 2 === 0) {
                         let p8 = Math.max(0, (complexity - 0.10) * 4.0); 
                         if (seededRandom() < p8) kVel = drumVel * 0.9;
                     } 
@@ -556,6 +566,7 @@
                     }
                 }
 
+                // --- GHOST NOTE-OK A PERGŐN ---
                 if (fillAmount > 0 && !isHeavyBreakdown) {
                     if (!isSnareAnchor && kVel === 0) {
                         let xCurve = Math.max(0, 1.0 - Math.abs(complexity - 0.4) * 2.5); 
@@ -564,46 +575,72 @@
                 }
 
                 // ==========================================
-                // Y TENGELY - ÚJ "TIGHT TENSION" ZÓNA
+                // Y TENGELY - CINTÁNYÉR DYNAMICS (TIGHT TENSION MINDENHOL)
                 // ==========================================
                 
                 if (isHeavyBreakdown) {
-                    if (i === 0 || i === i2) cVel = cymbalVel;
+                    // BREAKDOWN (Csak 1 és 3)
+                    if (mI === 0 || mI === 8) cVel = cymbalVel;
                     else cVel = 0; 
                 }
                 else if (loudness < 0.25) {
-                    if (i % i4 === 0 && seededRandom() < (loudness * 4 + 0.3)) cVel = cymbalVel * 0.8;
+                    // SPARSE/CALM
+                    if (isDoom) {
+                        if (mI % 8 === 0) cVel = cymbalVel * 0.8;
+                    } else {
+                        if (mI % 4 === 0 && seededRandom() < (loudness * 4 + 0.3)) cVel = cymbalVel * 0.8;
+                    }
                 } 
                 else if (loudness < 0.5) {
-                    if (i % i4 === 0) cVel = cymbalVel;
-                    else if (i % 2 === 0) cVel = cymbalVel * 0.8;
-                    else if (seededRandom() < fillAmount * 0.6) cVel = cymbalVel * 0.5;
+                    // QUIET FILLS
+                    if (isDoom) {
+                        if (mI % 4 === 0) cVel = cymbalVel * 0.8;
+                    } else {
+                        if (mI % 4 === 0) cVel = cymbalVel;
+                        else if (mI % 2 === 0) cVel = cymbalVel * 0.8;
+                        else if (seededRandom() < fillAmount * 0.6) cVel = cymbalVel * 0.5;
+                    }
                 } 
                 else if (loudness < 0.75) {
-                    // TIGHT TENSION: Erős hangsúly a negyedeken, sűrű de nagyon halk 16-odok közötte
-                    if (i % i4 === 0) {
-                        cVel = Math.min(127, cymbalVel * 1.1); // Erős ütés
+                    // TIGHT TENSION: Erős hangsúly a negyedeken, sűrű de nagyon halk 16-odok
+                    if (mI % 4 === 0) {
+                        cVel = Math.min(127, cymbalVel * 1.1);
+                        
+                        // ÁTMENET LOGIKA: Ha a Doom zónában közeledünk a Breakdownhoz (0.75 felé),
+                        // a dobos kihagyja a cintányért a közbenső negyedeken (4 és 12)!
+                        if (isDoom && loudness > 0.60 && (mI === 4 || mI === 12)) {
+                            cVel = 0; 
+                        }
                     } else {
-                        let density = 0.5 + (fillAmount * 0.5); // Egyre sűrűbb, ahogy mész felfelé
+                        let density = 0.5 + (fillAmount * 0.5); 
+                        if (isDoom) density *= 0.6; // Bal szélen kevesebb ghost cintányér
+                        
+                        // Átmenet: Minél közelebb a 0.75-höz, annál inkább elnémulnak a ghost hi-hatok
+                        let distToBreakdown = 0.75 - loudness; 
+                        if (distToBreakdown < 0.1) density *= (distToBreakdown * 10);
+
                         if (seededRandom() < density) {
-                            cVel = cymbalVel * 0.35; // De nagyon halk! Így ketyegős marad.
+                            cVel = cymbalVel * 0.35; 
                         }
                     }
                 } 
                 else {
-                    if (complexity >= 0.75) {
-                        if (i % (i4 * 2) === 0) cVel = cymbalVel;
+                    // RAW/HATE (CRASH ZÓNA)
+                    if (isPunk || isBlast) {
+                        if (mI % 8 === 0) cVel = cymbalVel; // Sűrű zúzdánál csak félig üt!
                     } else {
-                        if (i % i4 === 0) cVel = cymbalVel; 
+                        if (mI % 4 === 0) cVel = cymbalVel; 
                     }
                 }
 
-                if (!isHeavyBreakdown && complexity >= 0.85) {
-                    if (i % 2 !== 0) cVel = 0; 
-                    if (loudness >= 0.75 && i % i4 !== 0) cVel = 0; 
+                // Biztonsági letisztítás Extrém tempónál (hogy ne szemeteljen be a fillből)
+                if (!isHeavyBreakdown && isBlast) {
+                    if (mI % 2 !== 0) cVel = 0; 
+                    if (loudness >= 0.75 && mI % 4 !== 0) cVel = 0; 
                 }
                 
-                if (!isHeavyBreakdown && complexity < 0.15 && i % i4 !== 0) cVel = 0;
+                // Doom letisztítás (ha nem feszített zónában van)
+                if (!isHeavyBreakdown && isDoom && loudness < 0.5 && mI % 4 !== 0) cVel = 0;
 
                 groove['Kick'][i] = kVel;
                 groove['Snare'][i] = sVel;
@@ -615,7 +652,7 @@
 
         const seqDiv = document.getElementById('sequencer');
         
-        function initSequencer(regenerate = true) {
+        function initSequencer() {
             seqDiv.innerHTML = '';
             instruments.forEach(inst => {
                 const row = document.createElement('div');
@@ -639,11 +676,7 @@
                 seqDiv.appendChild(row);
             });
 
-            if (regenerate) {
-                generateGroove();
-            } else {
-                updateSequencerVisuals();
-            }
+            generateGroove();
         }
 
         function updateSequencerVisuals() {
@@ -737,24 +770,18 @@
         const btnStepsMinus = document.getElementById('stepsMinus');
         const btnStepsPlus = document.getElementById('stepsPlus');
 
+        // ==== ÚJ LÉPÉSSZÁM LOGIKA ====
         function updateSteps(newVal) {
             totalSteps = Math.max(2, Math.min(32, newVal));
             stepsInput.value = totalSteps;
-
-            for(let inst in groove) {
-                if (groove[inst].length > totalSteps) {
-                    groove[inst] = groove[inst].slice(0, totalSteps);
-                } else if (groove[inst].length < totalSteps) {
-                    let diff = totalSteps - groove[inst].length;
-                    for(let i=0; i<diff; i++) groove[inst].push(0);
-                }
-            }
-
+            
             if (currentStep >= totalSteps) {
                 currentStep = 0;
             }
 
-            initSequencer(false); 
+            // Mivel a logika független (Master Grid 16), simán újragenerálhatjuk,
+            // az első N lépés hajszálpontosan ugyanaz marad!
+            initSequencer(); 
         }
 
         stepsInput.addEventListener('change', (e) => updateSteps(e.target.value));
@@ -875,12 +902,11 @@
                         let note = 36; // Kick
                         if (inst === 'Snare') note = 38;
                         if (inst === 'Cymbal') {
-                            // Dinamikus MIDI: a halk ütéseket zárt lábcinként exportáljuk!
                             if (cType === 'Crash') note = 49;
                             else if (cType === 'OpenHH') {
                                 note = vel < 85 ? 42 : 46; 
                             }
-                            else note = 42; // ClosedHH
+                            else note = 42; 
                         }
                         
                         eventsList.push({ step: step, type: 0x99, note: note, vel: vel });
@@ -938,8 +964,8 @@
         
         setTimeout(() => {
             const rect = xyPad.getBoundingClientRect();
-            // Mutassuk meg rögtön az új groove-ot!
-            updateXY(rect.width * 0.5, rect.height * 0.4); 
+            // Mutassuk meg a feszes átmenetet a bal oldalon!
+            updateXY(rect.width * 0.15, rect.height * 0.35); 
         }, 100);
 
     </script>
