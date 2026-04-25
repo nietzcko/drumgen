@@ -290,7 +290,7 @@
 </head>
 <body>
 
-    <h1>Groove Generator <span class="version">v3.4 Heavy Breakdown</span></h1>
+    <h1>Groove Generator <span class="version">v3.5 Producer Cut</span></h1>
 
     <div class="controls-row">
         <button id="playBtn" class="main-btn">PLAY</button>
@@ -376,7 +376,6 @@
         function playSound(inst, velocity, time) {
             if (!audioCtx) return;
             
-            // A master gain még mindig reagál az Y tengelyre
             let gainMultiplier = 0.4 + (loudness * 0.6); 
             const vol = (velocity / 127) * gainMultiplier;
             const gainNode = audioCtx.createGain();
@@ -481,12 +480,9 @@
             if (i4 === 0) i4 = 1;
             if (i2 === 0) i2 = 2;
 
-            // ==========================================
-            // KÜLÖN DOB ÉS CINTÁNYÉR HANGERŐ
-            // ==========================================
-            // A dob (Láb & Pergő) sosem megy 80 alá, és a felső felében 100-127 között van! Végig üt!
+            // A dobok VÉGIG ütnek, alul is megtartják az erőt!
             let drumVel = loudness >= 0.5 ? Math.floor(100 + (loudness - 0.5) * 54) : Math.floor(80 + (loudness * 40));
-            // A cintányér viszont lineárisan skálázódik a csendestől a hangosig
+            // A cintányér viszont rendesen lehalkul
             let cymbalVel = Math.floor(50 + (loudness * 77)); 
 
             let snareGhostVel = Math.floor(drumVel * 0.25); 
@@ -515,11 +511,14 @@
                 let isKickAnchor = false;
 
                 if (isHeavyBreakdown) {
-                    // BAL FELSŐ SAROK: 2-Crash Heavy Breakdown
-                    if (i === i2) isSnareAnchor = true;
-                    // Klasszikus Djent/Deathcore szinkópa (pl. 0, 3, 4, 11)
-                    if (i === 0) isKickAnchor = true;
-                    if ((i === 3 || i === 4 || i === 11) && seededRandom() < 0.7) isKickAnchor = true;
+                    // BAL FELSŐ SAROK: Tökéletes, bólogatós Breakdown
+                    if (i === i2) isSnareAnchor = true; // Pergő a sáv közepén (pl. 8-ason)
+                    
+                    // "Ti-ti" az elején (feszes nyolcadok)
+                    if (i === 0 || i === 2) isKickAnchor = true; 
+                    
+                    // Bólogatós szinkópák a 2. negyedben és a végén
+                    if (i === 5 || i === 11 || i === 12) isKickAnchor = true;
                 }
                 else if (complexity < 0.30) {
                     // DOOM -> HEAVY STOMP
@@ -581,13 +580,13 @@
                 }
 
                 // ==========================================
-                // Y TENGELY - CINTÁNYÉR DYNAMICS
+                // Y TENGELY - CINTÁNYÉR DYNAMICS (TAKARÍTOTT VERZIÓ)
                 // ==========================================
                 
                 if (isHeavyBreakdown) {
                     // A HEAVY BREAKDOWN CINTÁNYÉRJA: Szigorúan csak az 1-en és a 3-on! Tér és Súly!
                     if (i === 0 || i === i2) cVel = cymbalVel;
-                    else cVel = 0; // Totális csend a cintányéron a közbenső ütések alatt!
+                    else cVel = 0; 
                 }
                 else if (loudness < 0.25) {
                     // SPARSE/CALM
@@ -600,20 +599,26 @@
                     else if (seededRandom() < fillAmount * 0.6) cVel = cymbalVel * 0.5;
                 } 
                 else if (loudness < 0.75) {
-                    // LOUD FILLS
+                    // LOUD FILLS (Open HH)
                     if (i % 2 === 0) cVel = cymbalVel; 
                     else if (seededRandom() < fillAmount * 0.8) cVel = cymbalVel * 0.7; 
                 } 
                 else {
-                    // RAW/HATE (Nem breakdown)
-                    if (i % i4 === 0) cVel = cymbalVel; 
-                    else if (i % 2 === 0 && loudness > 0.9 && complexity < 0.7) cVel = cymbalVel * 0.8; 
+                    // RAW/HATE (CRASH ZÓNA) - TAKARÍTVA!
+                    // Itt már nincs 8-ad meg 16-od, csak letisztult, súlyos Crash.
+                    if (complexity >= 0.75) {
+                        // Tempósabb zúzásnál (Punk/Blast határa) csak a feleken üt (0, 8), hogy ne legyen kása
+                        if (i % (i4 * 2) === 0) cVel = cymbalVel;
+                    } else {
+                        // Sima Raw tempónál negyedeken (0, 4, 8, 12)
+                        if (i % i4 === 0) cVel = cymbalVel; 
+                    }
                 }
 
-                // Cintányér letisztítása Blast/Roll alatt (jobb szél)
+                // Extrém tempónál biztosítás (hogy a fill zónából se lógjon át semmi felesleges)
                 if (!isHeavyBreakdown && complexity >= 0.85) {
-                    if (i % 2 !== 0) cVel = 0; 
-                    if (loudness >= 0.75 && i % i4 !== 0) cVel = 0; 
+                    if (loudness < 0.75 && i % 2 !== 0) cVel = 0; // Hi-hat is letisztul blastbeat alatt
+                    if (loudness >= 0.75 && i % i4 !== 0) cVel = 0; // Extrém biztonsági takarítás
                 }
                 
                 // Sima Doom zónában letisztul
@@ -928,7 +933,8 @@
         
         setTimeout(() => {
             const rect = xyPad.getBoundingClientRect();
-            updateXY(rect.width * 0.35, rect.height * 0.5);
+            // Start breakdown position to show it off
+            updateXY(rect.width * 0.1, rect.height * 0.1);
         }, 100);
 
     </script>
