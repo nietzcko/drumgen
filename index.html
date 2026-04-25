@@ -290,7 +290,7 @@
 </head>
 <body>
 
-    <h1>Groove Generator <span class="version">v3.5 Producer Cut</span></h1>
+    <h1>Groove Generator <span class="version">v3.6 Step Cutter</span></h1>
 
     <div class="controls-row">
         <button id="playBtn" class="main-btn">PLAY</button>
@@ -480,15 +480,12 @@
             if (i4 === 0) i4 = 1;
             if (i2 === 0) i2 = 2;
 
-            // A dobok VÉGIG ütnek, alul is megtartják az erőt!
             let drumVel = loudness >= 0.5 ? Math.floor(100 + (loudness - 0.5) * 54) : Math.floor(80 + (loudness * 40));
-            // A cintányér viszont rendesen lehalkul
             let cymbalVel = Math.floor(50 + (loudness * 77)); 
 
             let snareGhostVel = Math.floor(drumVel * 0.25); 
             let kickGhostVel = Math.floor(drumVel * 0.55);
 
-            // Fillek Harang-görbéje (Y tengely)
             let fillAmount = 0;
             if (loudness < 0.25) fillAmount = 0; 
             else if (loudness < 0.5) fillAmount = (loudness - 0.25) * 4; 
@@ -504,42 +501,31 @@
                 let cVel = 0;
 
                 // ==========================================
-                // X TENGELY - ZÓNÁK ÉS SZERKEZET
+                // X TENGELY
                 // ==========================================
                 
                 let isSnareAnchor = false;
                 let isKickAnchor = false;
 
                 if (isHeavyBreakdown) {
-                    // BAL FELSŐ SAROK: Tökéletes, bólogatós Breakdown
-                    if (i === i2) isSnareAnchor = true; // Pergő a sáv közepén (pl. 8-ason)
-                    
-                    // "Ti-ti" az elején (feszes nyolcadok)
+                    if (i === i2) isSnareAnchor = true; 
                     if (i === 0 || i === 2) isKickAnchor = true; 
-                    
-                    // Bólogatós szinkópák a 2. negyedben és a végén
                     if (i === 5 || i === 11 || i === 12) isKickAnchor = true;
                 }
                 else if (complexity < 0.30) {
-                    // DOOM -> HEAVY STOMP
                     if (i === i2) isSnareAnchor = true;
                     if (i === 0) isKickAnchor = true;
                 } else if (complexity < 0.65) {
-                    // ROCK/GROOVE
                     if (i % (i4 * 2) === i4) isSnareAnchor = true;
                     if (i % (i4 * 2) === 0) isKickAnchor = true;
                 } else if (complexity < 0.85) {
-                    // PUNK
                     let halfQ = Math.floor(i4 / 2);
                     if (i % i4 === halfQ) isSnareAnchor = true;
                     if (i % i4 === 0) isKickAnchor = true;
                 } else {
-                    // FILL / BLAST ZÓNA
                     if (loudness < 0.35) {
-                        // Jobb Alul: 16-od PERGŐ PÖRGETÉS
                         isSnareAnchor = true; 
                     } else {
-                        // Jobb Fent: VÁLTAKOZÓ BLASTBEAT
                         if (i % 2 !== 0) isSnareAnchor = true; 
                         if (i % 2 === 0) isKickAnchor = true;  
                     }
@@ -547,7 +533,6 @@
 
                 if (isSnareAnchor) {
                     sVel = drumVel;
-                    // Pergő pörgetés dinamikája
                     if (complexity >= 0.85 && loudness < 0.35 && i % 2 !== 0) {
                         sVel = drumVel * 0.7; 
                     }
@@ -555,14 +540,11 @@
                 
                 if (isKickAnchor) kVel = drumVel;
 
-                // --- LÁBDOB FOLYAMATOS SŰRŰSÖDÉSE A ROCK ZÓNÁBAN ---
                 if (!isHeavyBreakdown && !isKickAnchor && !isSnareAnchor && complexity >= 0.10 && complexity < 0.85) {
-                    // 8-adok:
                     if (i % 2 === 0) {
                         let p8 = Math.max(0, (complexity - 0.10) * 4.0); 
                         if (seededRandom() < p8) kVel = drumVel * 0.9;
                     } 
-                    // 16-odok GHOST (Drasztikusan ritkítva, csak fill esetén!)
                     else {
                         let p16 = Math.max(0, (complexity - 0.25) * 1.5);
                         if (fillAmount > 0.2 && seededRandom() < p16 * fillAmount * 0.2) {
@@ -571,7 +553,6 @@
                     }
                 }
 
-                // --- GHOST NOTE-OK A PERGŐN (Nagyon ritkán) ---
                 if (fillAmount > 0 && !isHeavyBreakdown) {
                     if (!isSnareAnchor && kVel === 0) {
                         let xCurve = Math.max(0, 1.0 - Math.abs(complexity - 0.4) * 2.5); 
@@ -580,48 +561,38 @@
                 }
 
                 // ==========================================
-                // Y TENGELY - CINTÁNYÉR DYNAMICS (TAKARÍTOTT VERZIÓ)
+                // Y TENGELY
                 // ==========================================
                 
                 if (isHeavyBreakdown) {
-                    // A HEAVY BREAKDOWN CINTÁNYÉRJA: Szigorúan csak az 1-en és a 3-on! Tér és Súly!
                     if (i === 0 || i === i2) cVel = cymbalVel;
                     else cVel = 0; 
                 }
                 else if (loudness < 0.25) {
-                    // SPARSE/CALM
                     if (i % i4 === 0 && seededRandom() < (loudness * 4 + 0.3)) cVel = cymbalVel * 0.8;
                 } 
                 else if (loudness < 0.5) {
-                    // QUIET FILLS
                     if (i % i4 === 0) cVel = cymbalVel;
                     else if (i % 2 === 0) cVel = cymbalVel * 0.8;
                     else if (seededRandom() < fillAmount * 0.6) cVel = cymbalVel * 0.5;
                 } 
                 else if (loudness < 0.75) {
-                    // LOUD FILLS (Open HH)
                     if (i % 2 === 0) cVel = cymbalVel; 
                     else if (seededRandom() < fillAmount * 0.8) cVel = cymbalVel * 0.7; 
                 } 
                 else {
-                    // RAW/HATE (CRASH ZÓNA) - TAKARÍTVA!
-                    // Itt már nincs 8-ad meg 16-od, csak letisztult, súlyos Crash.
                     if (complexity >= 0.75) {
-                        // Tempósabb zúzásnál (Punk/Blast határa) csak a feleken üt (0, 8), hogy ne legyen kása
                         if (i % (i4 * 2) === 0) cVel = cymbalVel;
                     } else {
-                        // Sima Raw tempónál negyedeken (0, 4, 8, 12)
                         if (i % i4 === 0) cVel = cymbalVel; 
                     }
                 }
 
-                // Extrém tempónál biztosítás (hogy a fill zónából se lógjon át semmi felesleges)
                 if (!isHeavyBreakdown && complexity >= 0.85) {
-                    if (loudness < 0.75 && i % 2 !== 0) cVel = 0; // Hi-hat is letisztul blastbeat alatt
-                    if (loudness >= 0.75 && i % i4 !== 0) cVel = 0; // Extrém biztonsági takarítás
+                    if (i % 2 !== 0) cVel = 0; 
+                    if (loudness >= 0.75 && i % i4 !== 0) cVel = 0; 
                 }
                 
-                // Sima Doom zónában letisztul
                 if (!isHeavyBreakdown && complexity < 0.15 && i % i4 !== 0) cVel = 0;
 
                 groove['Kick'][i] = kVel;
@@ -634,7 +605,7 @@
 
         const seqDiv = document.getElementById('sequencer');
         
-        function initSequencer() {
+        function initSequencer(regenerate = true) {
             seqDiv.innerHTML = '';
             instruments.forEach(inst => {
                 const row = document.createElement('div');
@@ -657,7 +628,12 @@
                 row.appendChild(stepsDiv);
                 seqDiv.appendChild(row);
             });
-            generateGroove();
+
+            if (regenerate) {
+                generateGroove();
+            } else {
+                updateSequencerVisuals();
+            }
         }
 
         function updateSequencerVisuals() {
@@ -751,10 +727,28 @@
         const btnStepsMinus = document.getElementById('stepsMinus');
         const btnStepsPlus = document.getElementById('stepsPlus');
 
+        // ==== ÚJ LOGIKA A LÉPÉSEK ÁLLÍTÁSÁHOZ ====
         function updateSteps(newVal) {
             totalSteps = Math.max(2, Math.min(32, newVal));
             stepsInput.value = totalSteps;
-            initSequencer(); 
+
+            // Csak levágjuk vagy kibővítjük csenddel a groove-ot, nincs újragenerálás!
+            for(let inst in groove) {
+                if (groove[inst].length > totalSteps) {
+                    groove[inst] = groove[inst].slice(0, totalSteps);
+                } else if (groove[inst].length < totalSteps) {
+                    let diff = totalSteps - groove[inst].length;
+                    for(let i=0; i<diff; i++) groove[inst].push(0);
+                }
+            }
+
+            // Ha épp egy olyan lépésen vagyunk, amit levágtunk, visszaugrunk az elejére
+            if (currentStep >= totalSteps) {
+                currentStep = 0;
+            }
+
+            // Hamis flaget adunk át, így csak a DOM épül újra, de nem fut le a generateGroove
+            initSequencer(false); 
         }
 
         stepsInput.addEventListener('change', (e) => updateSteps(e.target.value));
@@ -933,8 +927,7 @@
         
         setTimeout(() => {
             const rect = xyPad.getBoundingClientRect();
-            // Start breakdown position to show it off
-            updateXY(rect.width * 0.1, rect.height * 0.1);
+            updateXY(rect.width * 0.35, rect.height * 0.5);
         }, 100);
 
     </script>
