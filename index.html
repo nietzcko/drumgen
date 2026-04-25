@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Web Drummer Groove Generator</title>
+    <title>Web Drummer Groove Generator - Metal Edition</title>
     <style>
         :root {
             --bg-color: #1a1a1a;
@@ -54,7 +54,7 @@
             align-items: center;
         }
 
-        button {
+        button.main-btn {
             background-color: var(--pad-bg);
             color: var(--accent);
             border: 1px solid #444;
@@ -65,25 +65,68 @@
             outline: none;
         }
 
-        button:active {
-            background-color: #444;
-        }
+        button.main-btn:active { background-color: #444; }
 
         .bpm-container {
             display: flex;
             flex-direction: column;
             align-items: center;
+            gap: 5px;
         }
 
-        input[type=range] {
-            accent-color: var(--accent);
-            width: 100px;
+        .bpm-label {
+            font-size: 12px;
+            letter-spacing: 1px;
+            color: #aaa;
+        }
+
+        .bpm-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .small-btn {
+            background-color: var(--pad-bg);
+            color: var(--accent);
+            border: 1px solid #444;
+            border-radius: 8px;
+            width: 35px;
+            height: 35px;
+            font-size: 18px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .small-btn:active { background-color: #444; }
+
+        input[type="number"] {
+            width: 55px;
+            height: 31px;
+            text-align: center;
+            background: #2a2a2a;
+            color: var(--accent);
+            border: 1px solid #444;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            outline: none;
+            -moz-appearance: textfield;
+        }
+
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
         }
 
         .xy-wrapper {
             position: relative;
             width: 300px;
             height: 300px;
+            margin-top: 10px;
             margin-bottom: 30px;
         }
 
@@ -143,6 +186,7 @@
             color: #aaa;
             text-align: right;
             padding-right: 10px;
+            font-weight: bold;
         }
 
         .steps {
@@ -174,39 +218,47 @@
             color: var(--accent);
             width: 100%;
             max-width: 400px;
+            padding: 12px;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
 
-    <h1>Groove Generator <span class="version">v1.1</span></h1>
+    <h1>Groove Generator <span class="version">v1.2 Metal</span></h1>
 
     <div class="controls">
-        <button id="playBtn">Play</button>
+        <button id="playBtn" class="main-btn">Play</button>
         <div class="bpm-container">
-            <span id="bpmDisplay">120 BPM</span>
-            <input type="range" id="bpmSlider" min="60" max="180" value="120">
+            <div class="bpm-label">TEMPO (BPM)</div>
+            <div class="bpm-controls">
+                <button id="bpmMinus" class="small-btn">-</button>
+                <input type="number" id="bpmInput" value="130" min="40" max="300">
+                <button id="bpmPlus" class="small-btn">+</button>
+            </div>
         </div>
     </div>
 
     <div class="xy-wrapper">
-        <span class="label top">Loud</span>
-        <span class="label bottom">Soft</span>
-        <span class="label left">Simple</span>
-        <span class="label right">Complex</span>
+        <span class="label top">Loud (Ride)</span>
+        <span class="label bottom">Soft (HiHat)</span>
+        <span class="label left">Rock</span>
+        <span class="label right">Blastbeat</span>
         <div class="xy-pad" id="xyPad">
             <div class="puck" id="puck"></div>
         </div>
     </div>
 
     <div class="sequencer" id="sequencer">
-    </div>
+        </div>
 
     <button id="downloadMidiBtn" class="download-btn">⬇ MIDI Fájl Letöltése</button>
 
     <script>
         let isPlaying = false;
-        let bpm = 120;
+        let bpm = 130;
         let complexity = 0.5;
         let loudness = 0.5;
         
@@ -216,8 +268,10 @@
         let scheduleAheadTime = 0.1; 
         let timerID;
 
-        const instruments = ['HiHat', 'Snare', 'Kick'];
+        // 4. Sáv hozzáadása
+        const instruments = ['Ride', 'HiHat', 'Snare', 'Kick'];
         let groove = {
+            'Ride': new Array(16).fill(0),
             'HiHat': new Array(16).fill(0),
             'Snare': new Array(16).fill(0),
             'Kick': new Array(16).fill(0)
@@ -237,99 +291,148 @@
 
         function playSound(inst, velocity, time) {
             if (!audioCtx) return;
+            
+            // A hangerő sosem megy 0-ra (alap: 30% hangerő min, 100% max)
+            let gainMultiplier = 0.3 + (loudness * 0.7);
+            const vol = (velocity / 127) * gainMultiplier;
+            
             const gainNode = audioCtx.createGain();
-            const vol = (velocity / 127) * loudness;
             gainNode.gain.setValueAtTime(vol, time);
             gainNode.connect(audioCtx.destination);
 
             if (inst === 'Kick') {
                 const osc = audioCtx.createOscillator();
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(150, time);
-                osc.frequency.exponentialRampToValueAtTime(0.001, time + 0.5);
-                gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.5);
+                // Metálosabb, kattanósabb kick egy pici magas freki indulással
+                osc.frequency.setValueAtTime(250, time);
+                osc.frequency.exponentialRampToValueAtTime(0.001, time + 0.3);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.3);
                 osc.connect(gainNode);
                 osc.start(time);
-                osc.stop(time + 0.5);
+                osc.stop(time + 0.3);
             } else if (inst === 'Snare') {
                 const osc = audioCtx.createOscillator();
                 osc.type = 'triangle';
-                osc.frequency.setValueAtTime(200, time);
+                osc.frequency.setValueAtTime(220, time);
+                
                 const noise = audioCtx.createBufferSource();
                 const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.2, audioCtx.sampleRate);
                 const output = buffer.getChannelData(0);
-                for (let i = 0; i < output.length; i++) {
-                    output[i] = Math.random() * 2 - 1;
-                }
+                for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
                 noise.buffer = buffer;
                 
                 const noiseFilter = audioCtx.createBiquadFilter();
                 noiseFilter.type = 'highpass';
-                noiseFilter.frequency.value = 1000;
+                noiseFilter.frequency.value = 1200;
                 noise.connect(noiseFilter);
                 noiseFilter.connect(gainNode);
                 
                 osc.connect(gainNode);
-                gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
                 
                 osc.start(time);
                 noise.start(time);
-                osc.stop(time + 0.2);
+                osc.stop(time + 0.25);
             } else if (inst === 'HiHat') {
                 const noise = audioCtx.createBufferSource();
                 const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.1, audioCtx.sampleRate);
                 const output = buffer.getChannelData(0);
-                for (let i = 0; i < output.length; i++) {
-                    output[i] = Math.random() * 2 - 1;
-                }
+                for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
                 noise.buffer = buffer;
                 
-                const bandpass = audioCtx.createBiquadFilter();
-                bandpass.type = 'bandpass';
-                bandpass.frequency.value = 8000;
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'highpass';
+                filter.frequency.value = 7000;
                 
-                noise.connect(bandpass);
-                bandpass.connect(gainNode);
+                noise.connect(filter);
+                filter.connect(gainNode);
                 gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
                 
                 noise.start(time);
+            } else if (inst === 'Ride') {
+                // Fémes hangzáshoz szinusz ping + hosszan lecsengő szűrt zaj
+                const ping = audioCtx.createOscillator();
+                ping.type = 'sine';
+                ping.frequency.setValueAtTime(3200, time);
+                
+                const noise = audioCtx.createBufferSource();
+                const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 1.5, audioCtx.sampleRate);
+                const output = buffer.getChannelData(0);
+                for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
+                noise.buffer = buffer;
+
+                const bandpass = audioCtx.createBiquadFilter();
+                bandpass.type = 'highpass';
+                bandpass.frequency.value = 6000;
+
+                ping.connect(gainNode);
+                noise.connect(bandpass);
+                bandpass.connect(gainNode);
+
+                ping.start(time);
+                ping.stop(time + 0.1);
+                noise.start(time);
+                noise.stop(time + 1.2);
+                
+                gainNode.gain.exponentialRampToValueAtTime(0.001, time + 1.2);
             }
         }
 
+        // METÁL ALGORITMUS
         function generateGroove() {
             for(let inst in groove) groove[inst].fill(0);
 
-            let baseVel = Math.floor(60 + (loudness * 67));
+            let baseVel = Math.floor(70 + (loudness * 57)); // Keményebb leütések
             let ghostVel = Math.floor(baseVel * 0.5);
 
-            groove['Kick'][0] = baseVel;
-            if (complexity > 0.1) groove['Kick'][8] = baseVel;
-            if (complexity > 0.4) groove['Kick'][10] = ghostVel;
-            if (complexity > 0.7) {
-                groove['Kick'][14] = ghostVel;
-                groove['Kick'][3] = ghostVel;
-            }
-            if (complexity > 0.9) groove['Kick'][15] = ghostVel;
+            // Ha fent van a kurzor, Ride. Ha lent, HiHat.
+            let activeCymbal = loudness > 0.55 ? 'Ride' : 'HiHat';
 
-            if (complexity > 0.05) {
+            if (complexity < 0.25) {
+                // 1. Sima lassú rock
+                groove['Kick'][0] = baseVel;
+                groove['Kick'][8] = baseVel;
                 groove['Snare'][4] = baseVel;
                 groove['Snare'][12] = baseVel;
-            }
-            if (complexity > 0.5) groove['Snare'][7] = ghostVel;
-            if (complexity > 0.8) groove['Snare'][15] = ghostVel; 
-            if (complexity > 0.95) groove['Snare'][9] = ghostVel;
+                for(let i=0; i<16; i+=4) groove[activeCymbal][i] = baseVel;
 
-            if (complexity < 0.3) {
-                [0, 4, 8, 12].forEach(i => groove['HiHat'][i] = baseVel);
-            } else if (complexity < 0.7) {
-                for(let i=0; i<16; i+=2) {
-                    groove['HiHat'][i] = (i % 4 === 0) ? baseVel : ghostVel;
-                }
-            } else {
+            } else if (complexity < 0.5) {
+                // 2. Groove Metal (szinkópák, extra lábdobok)
+                groove['Kick'][0] = baseVel;
+                groove['Kick'][3] = ghostVel;
+                groove['Kick'][8] = baseVel;
+                groove['Kick'][10] = ghostVel;
+                groove['Snare'][4] = baseVel;
+                groove['Snare'][12] = baseVel;
+                for(let i=0; i<16; i+=2) groove[activeCymbal][i] = (i%4===0) ? baseVel : ghostVel;
+
+            } else if (complexity < 0.8) {
+                // 3. Thrash beat + Dupla lábdob beindul
+                groove['Snare'][4] = baseVel;
+                groove['Snare'][12] = baseVel;
+                
+                // Folyamatos 16-od lábdob (dupla pedál)
                 for(let i=0; i<16; i++) {
-                    if (i % 4 === 0) groove['HiHat'][i] = baseVel;
-                    else if (i % 2 === 0) groove['HiHat'][i] = ghostVel + 10;
-                    else groove['HiHat'][i] = ghostVel - 10;
+                    if (i !== 4 && i !== 12) {
+                        groove['Kick'][i] = baseVel;
+                    }
+                }
+                // Nyolcad cintányérok
+                for(let i=0; i<16; i+=2) groove[activeCymbal][i] = baseVel;
+
+            } else {
+                // 4. BLASTBEAT (Teljes káosz)
+                for(let i=0; i<16; i++) {
+                    // Csatolt Kick és Snare nagyon gyorsan (tradicionális blast)
+                    if (i % 2 === 0) {
+                        groove['Kick'][i] = baseVel;
+                        groove['Snare'][i] = ghostVel; // Nagyon halk kísérő snare
+                    } else {
+                        groove['Kick'][i] = ghostVel;
+                        groove['Snare'][i] = baseVel;
+                    }
+                    // Minden ütésre cintányér
+                    groove[activeCymbal][i] = baseVel;
                 }
             }
 
@@ -346,7 +449,7 @@
                 
                 const label = document.createElement('div');
                 label.className = 'row-label';
-                label.innerText = inst === 'HiHat' ? 'HH' : (inst === 'Snare' ? 'SN' : 'KD');
+                label.innerText = inst === 'HiHat' ? 'HH' : (inst === 'Snare' ? 'SN' : (inst === 'Kick' ? 'KD' : 'RD'));
                 row.appendChild(label);
 
                 const stepsDiv = document.createElement('div');
@@ -418,6 +521,7 @@
             timerID = setTimeout(scheduler, lookahead);
         }
 
+        // --- GOMB ESEMÉNYEK ---
         const playBtn = document.getElementById('playBtn');
         playBtn.addEventListener('click', () => {
             initAudio();
@@ -437,13 +541,21 @@
             }
         });
 
-        const bpmSlider = document.getElementById('bpmSlider');
-        const bpmDisplay = document.getElementById('bpmDisplay');
-        bpmSlider.addEventListener('input', (e) => {
-            bpm = e.target.value;
-            bpmDisplay.innerText = `${bpm} BPM`;
-        });
+        // BPM Kezelés (+ / - / gépelés)
+        const bpmInput = document.getElementById('bpmInput');
+        const btnMinus = document.getElementById('bpmMinus');
+        const btnPlus = document.getElementById('bpmPlus');
 
+        function updateBpm(newVal) {
+            bpm = Math.max(40, Math.min(300, newVal)); // Korlátozás 40 és 300 közé
+            bpmInput.value = bpm;
+        }
+
+        bpmInput.addEventListener('change', (e) => updateBpm(e.target.value));
+        btnMinus.addEventListener('click', () => updateBpm(bpm - 5));
+        btnPlus.addEventListener('click', () => updateBpm(bpm + 5));
+
+        // XY PAD Kezelés
         const xyPad = document.getElementById('xyPad');
         const puck = document.getElementById('puck');
 
@@ -477,6 +589,7 @@
         xyPad.addEventListener('touchstart', (e) => { e.preventDefault(); updateXY(e.touches[0].clientX, e.touches[0].clientY); }, {passive: false});
         xyPad.addEventListener('touchmove', handlePadMove, {passive: false});
 
+        // MIDI Generálás
         function toVLQ(n) {
             let buffer = [n & 0x7F];
             while ((n >>= 7)) { buffer.unshift((n & 0x7F) | 0x80); }
@@ -486,7 +599,8 @@
         document.getElementById('downloadMidiBtn').addEventListener('click', () => {
             const TICKS_PER_BEAT = 120;
             const TICKS_PER_16TH = TICKS_PER_BEAT / 4;
-            const midiNotes = { 'Kick': 36, 'Snare': 38, 'HiHat': 42 };
+            // General MIDI leképezés (Ride = 51)
+            const midiNotes = { 'Kick': 36, 'Snare': 38, 'HiHat': 42, 'Ride': 51 };
 
             let trackEvents = [];
             const microsecondsPerBeat = Math.round(60000000 / bpm);
@@ -542,7 +656,7 @@
             const a = document.createElement('a');
             a.style.display = 'none';
             a.href = url;
-            a.download = `groove_${bpm}bpm.mid`;
+            a.download = `metal_groove_${bpm}bpm.mid`;
             document.body.appendChild(a);
             a.click();
             setTimeout(() => {
@@ -551,11 +665,13 @@
             }, 100);
         });
 
+        // Inicializálás
         initSequencer(); 
         generateGroove(); 
         
         setTimeout(() => {
             const rect = xyPad.getBoundingClientRect();
+            // Indulás középről
             puck.style.left = `${rect.width * 0.5}px`;
             puck.style.top = `${rect.height * 0.5}px`;
         }, 100);
