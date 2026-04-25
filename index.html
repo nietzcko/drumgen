@@ -290,7 +290,7 @@
 </head>
 <body>
 
-    <h1>Groove Generator <span class="version">v3.1 Dynamic Matrix</span></h1>
+    <h1>Groove Generator <span class="version">v3.2 Alternating Blast</span></h1>
 
     <div class="controls-row">
         <button id="playBtn" class="main-btn">PLAY</button>
@@ -480,18 +480,17 @@
             if (i4 === 0) i4 = 1;
             if (i2 === 0) i2 = 2;
 
-            // Hangerő skálázódik az Y tengellyel (50 -> 127)
+            // Hangerők
             let baseVel = Math.floor(50 + (loudness * 77)); 
-            // Drasztikusan halkabb pergő ghost note!
-            let snareGhostVel = Math.floor(baseVel * 0.25); 
+            let snareGhostVel = Math.floor(baseVel * 0.25); // Jóval halkabb ghost note
             let kickGhostVel = Math.floor(baseVel * 0.7);
 
-            // Fillek Harang-görbéje (Y tengely)
+            // Fillek Harang-görbéje
             let fillAmount = 0;
-            if (loudness < 0.25) fillAmount = 0; // Sparse, no fills
-            else if (loudness < 0.5) fillAmount = (loudness - 0.25) * 4; // 0.0 -> 1.0 (Quiet fills)
-            else if (loudness < 0.75) fillAmount = 1; // 1.0 (Loud fills)
-            else fillAmount = Math.max(0, 1.0 - (loudness - 0.75) * 4); // 1.0 -> 0.0 (Cleans up at top)
+            if (loudness < 0.25) fillAmount = 0; 
+            else if (loudness < 0.5) fillAmount = (loudness - 0.25) * 4; 
+            else if (loudness < 0.75) fillAmount = 1; 
+            else fillAmount = Math.max(0, 1.0 - (loudness - 0.75) * 4); 
 
             let cType = getCymbalType();
 
@@ -501,59 +500,51 @@
                 let cVel = 0;
 
                 // ==========================================
-                // X TENGELY - STRUKTÚRA ÉS FOLYTONOS LÁBDOB
+                // X TENGELY - JAVÍTOTT STRUKTÚRA
                 // ==========================================
                 
                 let isSnareAnchor = false;
                 let isKickAnchor = false;
 
-                // SZÉLES ROCK ZÓNA!
                 if (complexity < 0.15) {
-                    // DOOM (0 - 15%)
+                    // DOOM (1 pergő)
                     if (i === i2) isSnareAnchor = true;
                     if (i === 0) isKickAnchor = true;
-                } else if (complexity < 0.60) {
-                    // ROCK/GROOVE (15% - 60%) - A pad közepe
+                } else if (complexity < 0.50) {
+                    // ROCK/GROOVE (2 pergő a kettesen/négyesen)
                     if (i % (i4 * 2) === i4) isSnareAnchor = true;
                     if (i % (i4 * 2) === 0) isKickAnchor = true;
                 } else if (complexity < 0.80) {
-                    // PUNK (60% - 80%)
-                    if (i % i4 === Math.floor(i4 / 2)) isSnareAnchor = true;
+                    // PUNK (4 pergő - dupla tempó offbeateken)
+                    let halfQ = Math.floor(i4 / 2);
+                    if (i % i4 === halfQ) isSnareAnchor = true;
                     if (i % i4 === 0) isKickAnchor = true;
-                } else if (complexity < 0.90) {
-                    // SKANK/BLAST (80% - 90%)
-                    if (i % 2 !== 0) isSnareAnchor = true;
-                    if (i % 2 === 0) isKickAnchor = true;
                 } else {
-                    // HAMMER (90% - 100%)
-                    if (i % 2 === 0) {
-                        isSnareAnchor = true;
-                        isKickAnchor = true;
-                    }
+                    // ALTERNATING BLAST (Szigorúan felváltva: lábdob az egyen, pergő az offbeaten)
+                    if (i % 2 !== 0) isSnareAnchor = true; // Pergő a páratlan 16-odokon
+                    if (i % 2 === 0) isKickAnchor = true;  // Lábdob a páros 16-odokon
                 }
 
                 if (isSnareAnchor) sVel = baseVel;
                 if (isKickAnchor) kVel = baseVel;
 
-                // --- LÁBDOB FOLYAMATOS SŰRŰSÖDÉSE A ROCK/PUNK ZÓNÁBAN ---
+                // --- LÁBDOB FOLYAMATOS SŰRŰSÖDÉSE A ROCK ZÓNÁBAN ---
                 if (!isKickAnchor && !isSnareAnchor && complexity >= 0.15 && complexity < 0.80) {
-                    // 8-adok beépülése
                     if (i % 2 === 0) {
-                        let p8 = (complexity - 0.15) * 2.5; 
-                        if (seededRandom() < p8) kVel = baseVel * 0.9;
-                    }
-                    // 16-odok (szinkópák) beépülése
-                    else {
-                        let p16 = Math.max(0, (complexity - 0.35) * 2.0);
+                        let p8 = Math.max(0, (complexity - 0.20) * 3.0); 
+                        if (seededRandom() < p8) kVel = baseVel * 0.85;
+                    } else {
+                        let p16 = Math.max(0, (complexity - 0.35) * 1.5);
                         if (seededRandom() < p16) kVel = kickGhostVel;
                     }
                 }
 
-                // --- GHOST NOTE-OK ÉS FILLEK (Y tengelytől is függ) ---
+                // --- SZŰKMARKÚBBA VETT GHOST NOTE-OK ---
                 if (fillAmount > 0) {
-                    // Finom pergő fillek (üres helyeken)
                     if (!isSnareAnchor && kVel === 0) {
-                        if (seededRandom() < fillAmount * 0.5) sVel = snareGhostVel;
+                        // Csak a Rock zóna környékén engedélyezzük, és ott is nagyon ritkán
+                        let xCurve = Math.max(0, 1.0 - Math.abs(complexity - 0.4) * 2.5); 
+                        if (seededRandom() < fillAmount * xCurve * 0.15) sVel = snareGhostVel;
                     }
                 }
 
@@ -566,29 +557,30 @@
                     if (i % i4 === 0 && seededRandom() < (loudness * 4 + 0.3)) cVel = baseVel * 0.8;
                 } 
                 else if (loudness < 0.5) {
-                    // QUIET FILLS: Alap negyedek/nyolcadok + halk tizenhatodos fillek
+                    // QUIET FILLS
                     if (i % i4 === 0) cVel = baseVel;
                     else if (i % 2 === 0) cVel = baseVel * 0.8;
-                    else if (seededRandom() < fillAmount * 0.6) cVel = baseVel * 0.5; // Halk tiri-tiri
+                    else if (seededRandom() < fillAmount * 0.6) cVel = baseVel * 0.5;
                 } 
                 else if (loudness < 0.75) {
-                    // LOUD FILLS: Nyitott lábcin, erősebb tizenhatodok
+                    // LOUD FILLS
                     if (i % 2 === 0) cVel = baseVel; 
                     else if (seededRandom() < fillAmount * 0.8) cVel = baseVel * 0.7; 
                 } 
                 else {
-                    // RAW/HATE: Nyers Crash, letisztul
-                    if (i % i4 === 0) cVel = baseVel; // Fő súlyok
-                    else if (i % 2 === 0 && loudness > 0.9 && complexity < 0.7) cVel = baseVel * 0.8; // Zúzás
+                    // RAW/HATE
+                    if (i % i4 === 0) cVel = baseVel; 
+                    else if (i % 2 === 0 && loudness > 0.9 && complexity < 0.7) cVel = baseVel * 0.8; 
                 }
 
-                // Extrém tempónál a cin kötelező letisztítása
+                // Cintányér letisztítása Blastbeat alatt (jobb szél)
                 if (complexity >= 0.8) {
-                    if (loudness >= 0.75 && i % i4 !== 0) cVel = 0; // Crash csak negyeden!
-                    if (loudness < 0.75 && i % 2 !== 0) cVel = 0; // Hihat csak nyolcadon!
+                    // Ha Blastbeat van, a cintányér igazodjon a lábdobhoz (páros 16-odok)
+                    if (i % 2 !== 0) cVel = 0; 
+                    if (loudness >= 0.75 && i % i4 !== 0) cVel = 0; // Hate Blastnél csak negyedeken van crash
                 }
                 
-                // Doom zónában is maradjon ritka
+                // Doom zónában is letisztul
                 if (complexity < 0.15 && i % i4 !== 0) cVel = 0;
 
                 groove['Kick'][i] = kVel;
@@ -900,7 +892,7 @@
         
         setTimeout(() => {
             const rect = xyPad.getBoundingClientRect();
-            // Start roughly in the middle of the Rock zone, medium volume
+            // Start in the Rock zone, medium volume
             updateXY(rect.width * 0.35, rect.height * 0.5);
         }, 100);
 
