@@ -263,10 +263,10 @@
 </head>
 <body>
 
-    <h1>Groove Generator <span class="version">v1.7 Gyro</span></h1>
+    <h1>Groove Generator <span class="version">v1.8 Gyro+</span></h1>
 
     <div class="controls">
-        <button id="playBtn" class="main-btn">Play</button>
+        <button id="playBtn" class="main-btn">PLAY</button>
         <div class="bpm-container">
             <div class="bpm-label">TEMPO (BPM)</div>
             <div class="bpm-controls">
@@ -279,7 +279,7 @@
 
     <div class="tilt-wrapper">
         <input type="checkbox" id="tiltToggle">
-        <label for="tiltToggle">Enable Tilt Control</label>
+        <label for="tiltToggle">Enable Tilt Control (Flat = Center)</label>
     </div>
 
     <div class="xy-wrapper">
@@ -332,7 +332,7 @@
         function getCymbalType() {
             if (loudness < 0.35) return 'ClosedHH';
             if (loudness < 0.70) return 'OpenHH';
-            return 'Crash'; // Ride cserélve Crash-re
+            return 'Crash'; 
         }
 
         function playSound(inst, velocity, time) {
@@ -383,7 +383,6 @@
                 const noise = audioCtx.createBufferSource();
                 
                 if (type === 'Crash') {
-                    // Robusztusabb, zizegős Crash hang
                     const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 1.5, audioCtx.sampleRate);
                     const output = buffer.getChannelData(0);
                     for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
@@ -391,12 +390,12 @@
 
                     const filter = audioCtx.createBiquadFilter();
                     filter.type = 'highpass';
-                    filter.frequency.value = 4000; // Mélyebb vágás, hogy meglegyen a "teste"
+                    filter.frequency.value = 4000; 
                     
                     noise.connect(filter);
                     filter.connect(gainNode);
                     
-                    gainNode.gain.setValueAtTime(vol * 1.2, time); // Kicsit hangosabb
+                    gainNode.gain.setValueAtTime(vol * 1.2, time); 
                     gainNode.gain.exponentialRampToValueAtTime(0.001, time + 1.5);
                     noise.start(time);
                     
@@ -437,17 +436,26 @@
             currentSeed = zoneX + (zoneY * 100); 
 
             let blastFactor = Math.max(0, (complexity - 0.75) / 0.25);
+            // Hate factor: Y tengely felső részénél megnöveli a 16-od lábdobok esélyét (Duplázó)
+            let hateFactor = Math.max(0, (loudness - 0.6) * 2.5); 
 
             for(let i = 0; i < 16; i++) {
                 
                 // --- KICK ---
                 let kVel = 0;
                 if (i === 0) kVel = baseVel;
-                else if (i === 8 && complexity >= 0.15) kVel = baseVel; // Lábdob a 3. ütésre, kivéve Doom-nál
+                else if (i === 8 && complexity >= 0.15) kVel = baseVel; 
                 else {
                     let prob = complexity * 0.8;
                     if (i % 2 !== 0) prob *= 0.4; 
                     if (seededRandom() < prob) kVel = (i % 2 !== 0) ? ghostVel : baseVel;
+                }
+
+                // Hate = Double Bass bekapcsolása (16-odok kitöltése)
+                if (hateFactor > 0 && i % 2 !== 0) {
+                    if (seededRandom() < hateFactor) {
+                        kVel = baseVel * 0.8; // Feszes 16-od rúgások
+                    }
                 }
 
                 if (blastFactor > 0) {
@@ -463,11 +471,9 @@
                 let sVel = 0;
                 
                 if (complexity < 0.15) {
-                    // DOOM / HALF-TIME: Csak egyetlen pergő ütés a 3. negyeden (8. lépés)
-                    if (i === 8) sVel = baseVel;
+                    if (i === 8) sVel = baseVel; // DOOM: Csak egy csapás a közepén
                 } else if (i === 4 || i === 12) {
-                    // STANDARD ROCK: 2-es és 4-es ütés
-                    sVel = baseVel; 
+                    sVel = baseVel; // ROCK: 2 és 4
                 } else {
                     let prob = Math.max(0, complexity - 0.2) * 0.7;
                     if (seededRandom() < prob && kVel === 0) sVel = ghostVel;
@@ -490,24 +496,33 @@
                 groove['Snare'][i] = sVel;
 
                 // --- CYMBAL ---
+                let cType = getCymbalType();
                 let cVel = 0;
-                let isEighth = (i % 2 === 0);
                 
-                // Ha Doom módban vagyunk, a cintányér is legyen szellősebb
-                if (complexity < 0.15) {
-                    if (i % 4 === 0) cVel = baseVel; // Csak negyedek
+                if (cType === 'Crash') {
+                    // Crash: Ritkított ütés, "tá - tá", főleg negyedeken (0, 4, 8, 12)
+                    if (i % 4 === 0) {
+                        // Nem mindig minden negyeden üt, picit függ az Y pozíciótól
+                        if (seededRandom() < (loudness + 0.2)) cVel = baseVel;
+                    }
                 } else {
-                    if (isEighth) {
-                        cVel = baseVel;
+                    // Hi-Hat: Jöhetnek a sűrűbb 16-odok (tiri)
+                    if (i % 2 === 0) {
+                        cVel = baseVel; // Biztos 8-adok (ti)
                     } else {
-                        if (complexity > 0.3 && loudness < 0.6 && seededRandom() < complexity) {
+                        // 16-odok (ri) esélye megnő ahogy jobbra húzod
+                        if (complexity > 0.2 && seededRandom() < (complexity + 0.2)) {
                             cVel = ghostVel;
                         }
                     }
+                    
+                    // Doom szellősítés
+                    if (complexity < 0.15 && i % 4 !== 0) cVel = 0; 
                 }
 
+                // Blastbeat alatt a cin is ritkul
                 if (blastFactor > 0.6 && i % 2 !== 0) cVel = 0;
-                if (blastFactor > 0.9 && i % 4 !== 0 && loudness > 0.7) cVel = 0;
+                if (blastFactor > 0.9 && i % 4 !== 0 && cType === 'Crash') cVel = 0;
 
                 groove['Cymbal'][i] = cVel;
             }
@@ -703,11 +718,20 @@
         window.addEventListener('deviceorientation', (e) => {
             if (!tiltEnabled) return;
 
-            let gamma = e.gamma || 0; 
-            let beta = e.beta || 0;   
+            // Vízszintes asztal = 0, 0
+            let gamma = e.gamma || 0; // Balra/Jobbra (-90 től +90 ig)
+            let beta = e.beta || 0;   // Előre/Hátra dőlés (-180 tól +180 ig)
 
-            let xMapped = Math.max(0, Math.min(1, (gamma + 40) / 80));
-            let yMapped = 1.0 - Math.max(0, Math.min(1, (beta - 20) / 60));
+            // -45 és +45 fok közötti dőlést mappelünk az XY pad 0.0 - 1.0 tartományára
+            let xMapped = 0.5 + (gamma / 90);
+            
+            // Ha előre döntöd a telefont (teteje lefelé süllyed), a beta pozitív lesz.
+            // Ahhoz, hogy ilyenkor a golyó "felguruljon" a Hate felé (Y = 0 irány), ki kell vonni.
+            let yMapped = 0.5 - (beta / 90);
+
+            // Túlcsordulásgátlás
+            xMapped = Math.max(0, Math.min(1, xMapped));
+            yMapped = Math.max(0, Math.min(1, yMapped));
 
             const rect = xyPad.getBoundingClientRect();
             updateXY(xMapped * rect.width, yMapped * rect.height);
@@ -735,7 +759,7 @@
             let cymbalNote = 42; 
             let cType = getCymbalType();
             if (cType === 'OpenHH') cymbalNote = 46;
-            if (cType === 'Crash') cymbalNote = 49; // Crash Cymbal 1 (MIDI Standard)
+            if (cType === 'Crash') cymbalNote = 49; 
 
             const midiNotes = { 'Kick': 36, 'Snare': 38, 'Cymbal': cymbalNote };
 
@@ -799,8 +823,7 @@
         
         setTimeout(() => {
             const rect = xyPad.getBoundingClientRect();
-            // Start out simple, middle volume
-            updateXY(rect.width * 0.1, rect.height * 0.5);
+            updateXY(rect.width * 0.5, rect.height * 0.5);
         }, 100);
 
     </script>
