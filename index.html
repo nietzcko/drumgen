@@ -179,7 +179,7 @@
         .label.top { top: -22px; left: 50%; transform: translateX(-50%); color: var(--accent); }
         .label.bottom { bottom: -22px; left: 50%; transform: translateX(-50%); }
         .label.left { left: -45px; top: 50%; transform: translateY(-50%) rotate(-90deg); width: 60px; }
-        .label.right { right: -45px; top: 50%; transform: translateY(-50%) rotate(90deg); width: 60px; color: var(--accent); }
+        .label.right { right: -45px; top: 50%; transform: translateY(-50%) rotate(90deg); width: 80px; color: var(--accent); }
 
         .xy-pad {
             width: 100%;
@@ -290,7 +290,7 @@
 </head>
 <body>
 
-    <h1>Groove Generator <span class="version">v3.2 Alternating Blast</span></h1>
+    <h1>Groove Generator <span class="version">v3.3 Build & Fill</span></h1>
 
     <div class="controls-row">
         <button id="playBtn" class="main-btn">PLAY</button>
@@ -323,7 +323,7 @@
         <span class="label top">Raw</span>
         <span class="label bottom">Sparse</span>
         <span class="label left">Doom</span>
-        <span class="label right">Blast</span>
+        <span class="label right">Fill / Blast</span>
         <div class="xy-pad" id="xyPad">
             <div class="puck" id="puck"></div>
         </div>
@@ -433,7 +433,8 @@
                     noise.connect(filter);
                     filter.connect(gainNode);
                     
-                    gainNode.gain.setValueAtTime(vol * 1.2, time); 
+                    // CRASH HALKÍTVA: Az 1.2-es szorzó helyett 0.85
+                    gainNode.gain.setValueAtTime(vol * 0.85, time); 
                     gainNode.gain.exponentialRampToValueAtTime(0.001, time + 1.5);
                     noise.start(time);
                     
@@ -482,10 +483,10 @@
 
             // Hangerők
             let baseVel = Math.floor(50 + (loudness * 77)); 
-            let snareGhostVel = Math.floor(baseVel * 0.25); // Jóval halkabb ghost note
+            let snareGhostVel = Math.floor(baseVel * 0.25); 
             let kickGhostVel = Math.floor(baseVel * 0.7);
 
-            // Fillek Harang-görbéje
+            // Fillek Harang-görbéje (Y tengely)
             let fillAmount = 0;
             if (loudness < 0.25) fillAmount = 0; 
             else if (loudness < 0.5) fillAmount = (loudness - 0.25) * 4; 
@@ -500,49 +501,63 @@
                 let cVel = 0;
 
                 // ==========================================
-                // X TENGELY - JAVÍTOTT STRUKTÚRA
+                // X TENGELY - ZÓNÁK ÉS SZERKEZET
                 // ==========================================
                 
                 let isSnareAnchor = false;
                 let isKickAnchor = false;
 
-                if (complexity < 0.15) {
-                    // DOOM (1 pergő)
+                if (complexity < 0.30) {
+                    // DOOM -> HEAVY STOMP (Még mindig csak 1 pergő, de a lábdob majd dúsul)
                     if (i === i2) isSnareAnchor = true;
                     if (i === 0) isKickAnchor = true;
-                } else if (complexity < 0.50) {
+                } else if (complexity < 0.65) {
                     // ROCK/GROOVE (2 pergő a kettesen/négyesen)
                     if (i % (i4 * 2) === i4) isSnareAnchor = true;
                     if (i % (i4 * 2) === 0) isKickAnchor = true;
-                } else if (complexity < 0.80) {
+                } else if (complexity < 0.85) {
                     // PUNK (4 pergő - dupla tempó offbeateken)
                     let halfQ = Math.floor(i4 / 2);
                     if (i % i4 === halfQ) isSnareAnchor = true;
                     if (i % i4 === 0) isKickAnchor = true;
                 } else {
-                    // ALTERNATING BLAST (Szigorúan felváltva: lábdob az egyen, pergő az offbeaten)
-                    if (i % 2 !== 0) isSnareAnchor = true; // Pergő a páratlan 16-odokon
-                    if (i % 2 === 0) isKickAnchor = true;  // Lábdob a páros 16-odokon
+                    // FILL / BLAST ZÓNA (Szélén minden ütésen hang van)
+                    if (loudness < 0.35) {
+                        // Jobb Alul: 16-od PERGŐ PÖRGETÉS (Snare Roll)
+                        isSnareAnchor = true; 
+                    } else {
+                        // Jobb Fent: VÁLTAKOZÓ BLASTBEAT
+                        if (i % 2 !== 0) isSnareAnchor = true; // Pergő a páratlanokon
+                        if (i % 2 === 0) isKickAnchor = true;  // Lábdob a párosokon
+                    }
                 }
 
-                if (isSnareAnchor) sVel = baseVel;
+                if (isSnareAnchor) {
+                    sVel = baseVel;
+                    // Ha a pergő pörgetés zónában vagyunk, adunk neki dinamikát, hogy igazi legyen
+                    if (complexity >= 0.85 && loudness < 0.35 && i % 2 !== 0) {
+                        sVel = baseVel * 0.7; // A páratlan tizenhatodok halkabbak a pörgetésnél
+                    }
+                }
+                
                 if (isKickAnchor) kVel = baseVel;
 
-                // --- LÁBDOB FOLYAMATOS SŰRŰSÖDÉSE A ROCK ZÓNÁBAN ---
-                if (!isKickAnchor && !isSnareAnchor && complexity >= 0.15 && complexity < 0.80) {
+                // --- LÁBDOB FOLYAMATOS SŰRŰSÖDÉSE A DOOM ÉS ROCK ZÓNÁBAN ---
+                // (Mielőtt bejön a 2. pergő, a lábdob 10%-tól szépen felszaporodik)
+                if (!isKickAnchor && !isSnareAnchor && complexity >= 0.10 && complexity < 0.85) {
                     if (i % 2 === 0) {
-                        let p8 = Math.max(0, (complexity - 0.20) * 3.0); 
-                        if (seededRandom() < p8) kVel = baseVel * 0.85;
+                        let p8 = Math.max(0, (complexity - 0.10) * 4.0); 
+                        if (seededRandom() < p8) kVel = baseVel * 0.9;
                     } else {
-                        let p16 = Math.max(0, (complexity - 0.35) * 1.5);
+                        let p16 = Math.max(0, (complexity - 0.25) * 2.5);
                         if (seededRandom() < p16) kVel = kickGhostVel;
                     }
                 }
 
-                // --- SZŰKMARKÚBBA VETT GHOST NOTE-OK ---
+                // --- GHOST NOTE-OK (Nagyon ritkán) ---
                 if (fillAmount > 0) {
                     if (!isSnareAnchor && kVel === 0) {
-                        // Csak a Rock zóna környékén engedélyezzük, és ott is nagyon ritkán
+                        // Csak a Rock zónában fordul elő apró kíséret
                         let xCurve = Math.max(0, 1.0 - Math.abs(complexity - 0.4) * 2.5); 
                         if (seededRandom() < fillAmount * xCurve * 0.15) sVel = snareGhostVel;
                     }
@@ -553,7 +568,7 @@
                 // ==========================================
                 
                 if (loudness < 0.25) {
-                    // SPARSE/CALM: Ritkás, halk
+                    // SPARSE/CALM
                     if (i % i4 === 0 && seededRandom() < (loudness * 4 + 0.3)) cVel = baseVel * 0.8;
                 } 
                 else if (loudness < 0.5) {
@@ -573,11 +588,11 @@
                     else if (i % 2 === 0 && loudness > 0.9 && complexity < 0.7) cVel = baseVel * 0.8; 
                 }
 
-                // Cintányér letisztítása Blastbeat alatt (jobb szél)
-                if (complexity >= 0.8) {
-                    // Ha Blastbeat van, a cintányér igazodjon a lábdobhoz (páros 16-odok)
+                // Cintányér letisztítása Blast/Roll alatt (jobb szél)
+                if (complexity >= 0.85) {
+                    // Blast/Roll esetén nem szemetelünk a 16-odokon cintányérral
                     if (i % 2 !== 0) cVel = 0; 
-                    if (loudness >= 0.75 && i % i4 !== 0) cVel = 0; // Hate Blastnél csak negyedeken van crash
+                    if (loudness >= 0.75 && i % i4 !== 0) cVel = 0; // Hate Blastnél csak negyedeken crash
                 }
                 
                 // Doom zónában is letisztul
@@ -892,7 +907,6 @@
         
         setTimeout(() => {
             const rect = xyPad.getBoundingClientRect();
-            // Start in the Rock zone, medium volume
             updateXY(rect.width * 0.35, rect.height * 0.5);
         }, 100);
 
