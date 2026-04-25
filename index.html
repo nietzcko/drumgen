@@ -290,7 +290,7 @@
 </head>
 <body>
 
-    <h1>Groove Generator <span class="version">v4.2 Sweet Spot</span></h1>
+    <h1>Groove Generator <span class="version">v4.3 Precision & Tilt</span></h1>
 
     <div class="controls-row">
         <button id="playBtn" class="main-btn">PLAY</button>
@@ -316,7 +316,7 @@
 
     <div class="tilt-wrapper">
         <input type="checkbox" id="tiltToggle">
-        <label for="tiltToggle">Enable Tilt Control (Flat = Center)</label>
+        <label for="tiltToggle">Enable Tilt Control (Auto-Centers)</label>
     </div>
 
     <div class="xy-wrapper">
@@ -340,7 +340,13 @@
         let totalSteps = 16;
         let complexity = 0.5; // X Axis
         let loudness = 0.5;   // Y Axis
+        
+        // TILT VARIABLES
         let tiltEnabled = false;
+        let needsCalibration = false;
+        let baseGamma = 0;
+        let baseBeta = 0;
+        const tiltSensitivity = 2.5; // Érzékenység: 2.5x gyorsabb mozgás
         
         let currentStep = 0;
         let nextNoteTime = 0;
@@ -489,16 +495,15 @@
             else fillAmount = Math.max(0, 1.0 - (loudness - 0.75) * 4); 
 
             // ==========================================
-            // ÚJ ZÓNA FELOSZTÁS (Középen hatalmas Sweet Spot!)
+            // KICENTIZETT ZÓNÁK (Szűkebb jobb szél)
             // ==========================================
-            let isDoom = complexity < 0.15;                               // 0% - 15% (Szűkebb)
-            let isRock = complexity >= 0.15 && complexity < 0.60;         // 15% - 60% (Szélesebb)
-            let isPunk = complexity >= 0.60 && complexity < 0.85;         // 60% - 85% (Szélesebb)
-            let isBlast = complexity >= 0.85;                             // 85% - 100% (Szűkebb)
+            let isDoom = complexity < 0.15;                               // 0% - 15%
+            let isRock = complexity >= 0.15 && complexity < 0.60;         // 15% - 60% 
+            let isPunk = complexity >= 0.60 && complexity < 0.92;         // 60% - 92% (Óriási játszótér)
+            let isBlast = complexity >= 0.92;                             // 92% - 100% (Vékony csík a szélén)
             
             let isHeavyBreakdown = (isDoom && loudness >= 0.75);
-            // Hangfal: Csak a legeslegjobb felső sarokban (X > 90%)
-            let isDeathcoreWall = (isBlast && loudness >= 0.85 && complexity >= 0.90); 
+            let isDeathcoreWall = (isBlast && loudness >= 0.85 && complexity >= 0.96); // Csak a legeslegszélén!
 
             for(let i = 0; i < totalSteps; i++) {
                 let kVel = 0;
@@ -507,9 +512,6 @@
 
                 let mI = i % 16; 
 
-                // ==========================================
-                // X TENGELY (Dobok rögzítése a 16-os rácsra)
-                // ==========================================
                 let isSnareAnchor = false;
                 let isKickAnchor = false;
 
@@ -517,7 +519,6 @@
                     if (mI === 8) isSnareAnchor = true; 
                     if (mI === 0) isKickAnchor = true; 
                     
-                    // Szűkített breakdown zónához igazított belépések
                     if (complexity >= 0.05 && mI === 2) isKickAnchor = true;
                     if (complexity >= 0.10 && mI === 14) isKickAnchor = true;
                 }
@@ -535,9 +536,9 @@
                     if (mI === 2 || mI === 6 || mI === 10 || mI === 14) isSnareAnchor = true;
                     if (mI === 0 || mI === 4 || mI === 8 || mI === 12) isKickAnchor = true;
                     
-                    // Szélesebb Punk zónához igazított galopp-belépések
+                    // Szélesebb Punk zónához finomított galopp
                     if (complexity >= 0.68 && (mI === 3 || mI === 11)) isKickAnchor = true;
-                    if (complexity >= 0.77 && (mI === 7 || mI === 15)) isKickAnchor = true;
+                    if (complexity >= 0.80 && (mI === 7 || mI === 15)) isKickAnchor = true;
                 } else {
                     if (loudness < 0.35) {
                         isSnareAnchor = true; 
@@ -556,10 +557,8 @@
                 
                 if (isKickAnchor) kVel = drumVel;
 
-                // Dinamikus lábdob a Rock és Punk zónák alatt
-                if (!isHeavyBreakdown && !isDeathcoreWall && !isKickAnchor && !isSnareAnchor && complexity >= 0.15 && complexity < 0.85) {
+                if (!isHeavyBreakdown && !isDeathcoreWall && !isKickAnchor && !isSnareAnchor && complexity >= 0.15 && complexity < 0.92) {
                     if (mI % 2 === 0) {
-                        // Finomított lábdob-sűrűsödés
                         let p8 = Math.max(0, (complexity - 0.15) * 3.0); 
                         if (seededRandom() < p8) kVel = drumVel * 0.9;
                     } 
@@ -577,10 +576,6 @@
                         if (seededRandom() < fillAmount * xCurve * 0.15) sVel = snareGhostVel;
                     }
                 }
-
-                // ==========================================
-                // Y TENGELY - CINTÁNYÉR DYNAMICS
-                // ==========================================
                 
                 if (isHeavyBreakdown) {
                     if (mI === 0 || mI === 8) cVel = cymbalVel;
@@ -625,7 +620,6 @@
                     }
                 } 
                 else {
-                    // RAW/HATE ZÓNA
                     if (mI % 4 === 0) cVel = cymbalVel; 
                 }
 
@@ -837,6 +831,7 @@
                         const permissionState = await DeviceOrientationEvent.requestPermission();
                         if (permissionState === 'granted') {
                             tiltEnabled = true;
+                            needsCalibration = true; // Auto-Center trigger
                         } else {
                             alert('Gyroscopic control permission denied.');
                             e.target.checked = false;
@@ -844,9 +839,11 @@
                     } catch (error) {
                         console.error(error);
                         tiltEnabled = true; 
+                        needsCalibration = true;
                     }
                 } else {
                     tiltEnabled = true;
+                    needsCalibration = true;
                 }
             } else {
                 tiltEnabled = false;
@@ -859,8 +856,19 @@
             let gamma = e.gamma || 0; 
             let beta = e.beta || 0;   
 
-            let xMapped = 0.5 + (gamma / 90);
-            let yMapped = 0.5 - (beta / 90);
+            // Kalibráció a bekapcsolás pillanatában!
+            if (needsCalibration) {
+                baseGamma = gamma;
+                baseBeta = beta;
+                needsCalibration = false;
+            }
+
+            let deltaGamma = gamma - baseGamma;
+            let deltaBeta = beta - baseBeta;
+
+            // Felszoroztuk a mozgást (tiltSensitivity), így kisebb csuklómozdulattal is bejárható a pad
+            let xMapped = 0.5 + ((deltaGamma * tiltSensitivity) / 90);
+            let yMapped = 0.5 - ((deltaBeta * tiltSensitivity) / 90);
 
             xMapped = Math.max(0, Math.min(1, xMapped));
             yMapped = Math.max(0, Math.min(1, yMapped));
@@ -958,7 +966,6 @@
         
         setTimeout(() => {
             const rect = xyPad.getBoundingClientRect();
-            // Start right in the middle "Sweet Spot" to show the wide Rock/Punk area
             updateXY(rect.width * 0.5, rect.height * 0.4); 
         }, 100);
 
