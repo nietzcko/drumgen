@@ -530,8 +530,26 @@
                 if (complexity >= 0.21 && mI === 6) isKick = true;
                 if (complexity >= 0.24 && mI === 12) isKick = true;
             } else if (isRock) {
+                // Alap: snare 4,12 / kick 0,8
                 if (mI === 4 || mI === 12) isSnare = true;
                 if (mI === 0 || mI === 8) isKick = true;
+                // Jobbra: 11. step jon be (mI=10)
+                if (complexity >= 0.32 && mI === 10) isKick = true;
+                // Kicsit jobbra: 9. (mI=8 mar van) -> 9. az mI=8, de az alap
+                // Inkabb: 10. (mI=9) jon be
+                if (complexity >= 0.40 && mI === 9) isKick = true;
+                // Meg jobbra: mI=9 kiesik, helyette mI=6 jon
+                if (complexity >= 0.48) {
+                    if (mI === 6) isKick = true;
+                    if (mI === 9) isKick = false; // kiesik
+                }
+                if (complexity >= 0.54 && mI === 14) isKick = true;
+                // Ghost snare-ok loudness szerint
+                if (!isSnare) {
+                    if (loudness >= 0.35 && (mI === 2 || mI === 14) && seededRandom() < 0.5) isSnare = 'ghost';
+                    if (loudness >= 0.50 && (mI === 6 || mI === 10) && seededRandom() < 0.55) isSnare = 'ghost';
+                    if (loudness >= 0.65 && (mI === 1 || mI === 9) && seededRandom() < 0.4) isSnare = 'ghost';
+                }
             } else if (isPunk) {
                 if (mI % 4 === 2) isSnare = true;
                 if (mI % 4 === 0) isKick = true;
@@ -572,7 +590,7 @@
             if ((isBlast || isDeathcoreWall) && loudness >= 0.75 && mI % 4 !== 0) cV = 0;
 
             groove['Kick'][i] = isKick ? drumVel : 0;
-            groove['Snare'][i] = isSnare ? drumVel : 0;
+            groove['Snare'][i] = isSnare === 'ghost' ? Math.floor(drumVel * 0.3) : (isSnare ? drumVel : 0);
             groove['Cymbal'][i] = cV;
         }
         updateSequencerVisuals();
@@ -645,6 +663,15 @@
     }
     document.getElementById('stepsMinus').onclick = () => updateSteps(totalSteps - 1);
     document.getElementById('stepsPlus').onclick = () => updateSteps(totalSteps + 1);
+
+    const bpmInput = document.getElementById('bpmInput');
+    function updateBpm(newVal) {
+        bpm = Math.max(40, Math.min(300, newVal));
+        bpmInput.value = bpm;
+    }
+    document.getElementById('bpmMinus').onclick = () => updateBpm(bpm - 1);
+    document.getElementById('bpmPlus').onclick = () => updateBpm(bpm + 1);
+    bpmInput.addEventListener('change', () => updateBpm(parseInt(bpmInput.value) || bpm));
 
     const xyPad = document.getElementById('xyPad');
     const puck = document.getElementById('puck');
