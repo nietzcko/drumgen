@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Web Drummer - Organic Metal Edition v5.3</title>
+    <title>Web Drummer - Organic Metal Edition v5.8</title>
     <style>
         :root {
             --bg-color: #1a1a1a;
@@ -340,7 +340,7 @@
 <body>
 
 ```
-<h1>Metal Engine <span class="version">v5.3</span></h1>
+<h1>Metal Engine <span class="version">v5.8</span></h1>
 
 <div class="controls-row">
     <button id="playBtn" class="main-btn">PLAY</button>
@@ -634,7 +634,7 @@
         currentSeed = zoneX + (zoneY * 100); 
 
         let drumVel = loudness >= 0.5 ? Math.floor(100 + (loudness - 0.5) * 54) : Math.floor(80 + (loudness * 40));
-        let cymbalVel = Math.floor(50 + (loudness * 77)); 
+        let cymbalVel = Math.floor(80 + (loudness * 47)); // velocity stable, density varies
 
         // Zóna határok:
         // Doom:  0.00 – 0.18  (18%)
@@ -645,7 +645,6 @@
         let isRock = complexity >= 0.18 && complexity < 0.52;
         let isPunk = complexity >= 0.52 && complexity < 0.88;
         let isBlast = complexity >= 0.88;
-        let isDeathcoreWall = (isBlast && loudness >= 0.85 && complexity >= 0.95);
 
         // complexity-t újranormalizáljuk zónán belülre (0..1)
         let rockPos  = isRock  ? (complexity - 0.18) / 0.34 : 0; // 0=rock eleje, 1=rock vége
@@ -655,9 +654,7 @@
             let mI = i % 16; 
             let isSnare = false; let isKick = false; let cV = 0;
 
-            if (isDeathcoreWall) {
-                isKick = true; if (mI % 2 === 0) isSnare = true;
-            } else if (isDoom) {
+            if (isDoom) {
                 if (mI === 8) isSnare = true;
                 if (mI === 0) isKick = true;
                 let dp = complexity / 0.18; // 0..1 doom-on belül
@@ -719,9 +716,16 @@
                 }
 
             } else {
-                // Blast: minden tizenhatod snare+kick felváltva
-                if (mI % 2 !== 0) isSnare = true;
-                if (mI % 2 === 0) isKick = true;
+                // Blast zóna:
+                // Alul (0-0.20): csak snare nyolcadon + ghost tizenhatódon, nincs kick
+                // Felső (0.20-1.0): teljes blast beat, snare+kick tizenhatódon felváltva
+                if (loudness < 0.20) {
+                    if (mI % 2 !== 0) isSnare = true;
+                    if (mI % 2 === 0 && mI % 4 !== 0 && seededRandom() < 0.15 + loudness * 0.40) isSnare = 'ghost';
+                } else {
+                    if (mI % 2 !== 0) isSnare = true;
+                    if (mI % 2 === 0) isKick = true;
+                }
             }
 
             if (isDoom) {
@@ -739,18 +743,27 @@
                 } else {
                     if (mI % 4 === 0) cV = cymbalVel;
                 }
-            } else if (isBlast || isDeathcoreWall) {
-                // Blast: csak negyedek, nagyon hangos
-                if (mI % 4 === 0) cV = cymbalVel;
-            } else {
-                // Rock + Punk: MINDIG tizenhatod alap, negyedeken erős accent
-                // negyed = teli, nyolcad = közepes, tizenhatod "és" = halk ghost
+            } else if (isBlast) {
+                // Blast cin: negyed erős, néha nyolcad, néha tizenhatód
+                const blastSixteenths = seededRandom() < 0.40;
                 if (mI % 4 === 0) {
-                    cV = cymbalVel;                        // negyed: erős
+                    cV = cymbalVel;
                 } else if (mI % 2 === 0) {
-                    cV = cymbalVel * 0.55;                 // nyolcad: közepes
-                } else {
-                    cV = cymbalVel * 0.30;                 // tizenhatod: halk ghost
+                    cV = cymbalVel * 0.55;
+                } else if (blastSixteenths) {
+                    cV = cymbalVel * 0.28;
+                }
+            } else {
+                // Rock + Punk: negyed mindig erős
+                // seed alapján néha nyolcados, néha tizenhatodos feel
+                // loudness NEM sűríti - csak a seed dönti el
+                const useSixteenths = seededRandom() < 0.45; // ~45% eséllyel tizenhatód feel
+                if (mI % 4 === 0) {
+                    cV = cymbalVel;
+                } else if (mI % 2 === 0) {
+                    cV = cymbalVel * 0.55;
+                } else if (useSixteenths) {
+                    cV = cymbalVel * 0.28;
                 }
             }
 
@@ -811,6 +824,13 @@
         }
         timerID = setTimeout(scheduler, lookahead);
     }
+
+    document.addEventListener('keydown', async (e) => {
+        if (e.code === 'Space' && e.target === document.body) {
+            e.preventDefault();
+            document.getElementById('playBtn').click();
+        }
+    });
 
     document.getElementById('playBtn').addEventListener('click', async function() {
         await initAudio();
