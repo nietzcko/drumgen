@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Web Drummer - Organic Metal Edition v4.5</title>
+    <title>Web Drummer - Organic Metal Edition v4.6</title>
     <style>
         :root {
             --bg-color: #1a1a1a;
@@ -284,6 +284,41 @@
         box-shadow: 0 0 10px #fff;
     }
 
+    .wav-status {
+        width: 100%;
+        max-width: 390px;
+        background: #222;
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 10px 12px;
+        margin-bottom: 15px;
+        box-sizing: border-box;
+        font-size: 11px;
+        color: #666;
+    }
+
+    .wav-status-title {
+        color: #aaa;
+        font-size: 10px;
+        letter-spacing: 1px;
+        font-weight: bold;
+        margin-bottom: 6px;
+    }
+
+    .wav-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 2px 0;
+        border-bottom: 1px solid #2a2a2a;
+    }
+
+    .wav-item:last-child { border-bottom: none; }
+
+    .wav-item .filename { color: #777; font-family: monospace; }
+
+    .wav-ok { color: #4caf50; }
+    .wav-missing { color: #555; }
+
     .download-btn {
         background-color: transparent;
         border: 1px solid var(--accent);
@@ -305,7 +340,7 @@
 <body>
 
 ```
-<h1>Metal Engine <span class="version">v4.5</span></h1>
+<h1>Metal Engine <span class="version">v4.6</span></h1>
 
 <div class="controls-row">
     <button id="playBtn" class="main-btn">PLAY</button>
@@ -347,6 +382,11 @@
 <div class="sequencer" id="sequencer">
 </div>
 
+<div class="wav-status" id="wavStatus">
+    <div class="wav-status-title">SAMPLES</div>
+    <div id="wavList"></div>
+</div>
+
 <button id="downloadMidiBtn" class="download-btn">DOWNLOAD MIDI</button>
 
 <script>
@@ -382,6 +422,26 @@
         'crash':        'crash.wav',
     };
 
+    function updateWavStatusUI() {
+        const list = document.getElementById('wavList');
+        if (!list) return;
+        const labels = {
+            'kick': 'kick.wav', 'snare': 'snare.wav', 'snare_ghost': 'snare_ghost.wav',
+            'hihat_closed': 'hihat_closed.wav', 'hihat_open': 'hihat_open.wav', 'crash': 'crash.wav'
+        };
+        const descriptions = {
+            'kick': 'Kick drum', 'snare': 'Snare', 'snare_ghost': 'Snare ghost (opcionális)',
+            'hihat_closed': 'Closed hi-hat', 'hihat_open': 'Open hi-hat', 'crash': 'Crash cymbal'
+        };
+        list.innerHTML = Object.entries(labels).map(([key, file]) => {
+            const loaded = !!wavBuffers[key];
+            return `<div class="wav-item">
+                <span class="filename">${file}</span>
+                <span class="${loaded ? 'wav-ok' : 'wav-missing'}">${loaded ? '✓ betöltve' : descriptions[key] === 'Snare ghost (opcionális)' ? '— szintetizált' : '— szintetizált'}</span>
+            </div>`;
+        }).join('');
+    }
+
     async function loadWavBuffers() {
         for (const [key, file] of Object.entries(wavFiles)) {
             try {
@@ -393,7 +453,11 @@
                 // file not found or decode error - fall back to synth
             }
         }
+        updateWavStatusUI();
     }
+
+    // Show default state on load
+    window.addEventListener('DOMContentLoaded', () => updateWavStatusUI());
 
     function playWav(key, vol, time) {
         if (!wavBuffers[key]) return false;
