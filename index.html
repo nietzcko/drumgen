@@ -372,13 +372,50 @@
     let groove = { 'Cymbal': [], 'Snare': [], 'Kick': [] };
 
     let audioCtx;
+    const wavBuffers = {};
+    const wavFiles = {
+        'kick':         'kick.wav',
+        'snare':        'snare.wav',
+        'snare_ghost':  'snare_ghost.wav',
+        'hihat_closed': 'hihat_closed.wav',
+        'hihat_open':   'hihat_open.wav',
+        'crash':        'crash.wav',
+    };
 
-    function initAudio() {
+    async function loadWavBuffers() {
+        for (const [key, file] of Object.entries(wavFiles)) {
+            try {
+                const res = await fetch(file);
+                if (!res.ok) continue;
+                const arrayBuf = await res.arrayBuffer();
+                wavBuffers[key] = await audioCtx.decodeAudioData(arrayBuf);
+            } catch(e) {
+                // file not found or decode error - fall back to synth
+            }
+        }
+    }
+
+    function playWav(key, vol, time) {
+        if (!wavBuffers[key]) return false;
+        const src = audioCtx.createBufferSource();
+        src.buffer = wavBuffers[key];
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(Math.min(1, vol), time);
+        src.connect(gain);
+        gain.connect(audioCtx.destination);
+        src.start(time);
+        return true;
+    }
+
+    async function initAudio() {
         if (!audioCtx) {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             audioCtx = new AudioContext();
+            await loadWavBuffers();
         }
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
     }
 
     // FIX 3: Update puck color and label colors based on proximity to axes
@@ -428,9 +465,9 @@
         return 'Crash'; 
     }
 
-    function playSound(inst, velocity, time) {
-        if (!audioCtx) return;
-        let gainMultiplier = 0.4 + (loudness * 0.6); 
+    function playSoundSynth(inst, velocity, time) {
+        // Fallback szintetizált hangok ha nincs WAV
+        const gainMultiplier = 0.4 + (loudness * 0.6);
         const vol = (velocity / 127) * gainMultiplier;
         const gainNode = audioCtx.createGain();
         gainNode.gain.setValueAtTime(vol, time);
@@ -443,8 +480,7 @@
             osc.frequency.exponentialRampToValueAtTime(0.001, time + 0.2);
             gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
             osc.connect(gainNode);
-            osc.start(time);
-            osc.stop(time + 0.2);
+            osc.start(time); osc.stop(time + 0.2);
         } else if (inst === 'Snare') {
             const osc = audioCtx.createOscillator();
             osc.type = 'triangle';
@@ -457,12 +493,9 @@
             const noiseFilter = audioCtx.createBiquadFilter();
             noiseFilter.type = 'highpass';
             noiseFilter.frequency.value = 1000;
-            noise.connect(noiseFilter);
-            noiseFilter.connect(gainNode);
-            osc.connect(gainNode);
+            noise.connect(noiseFilter); noiseFilter.connect(gainNode); osc.connect(gainNode);
             gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
-            osc.start(time); noise.start(time);
-            osc.stop(time + 0.25);
+            osc.start(time); noise.start(time); osc.stop(time + 0.25);
         } else if (inst === 'Cymbal') {
             let type = getCymbalType();
             const noise = audioCtx.createBufferSource();
@@ -472,9 +505,9 @@
                 for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
                 noise.buffer = buffer;
                 const filter = audioCtx.createBiquadFilter();
-                filter.type = 'highpass'; filter.frequency.value = 4000; 
+                filter.type = 'highpass'; filter.frequency.value = 4000;
                 noise.connect(filter); filter.connect(gainNode);
-                gainNode.gain.setValueAtTime(vol * 0.85, time); 
+                gainNode.gain.setValueAtTime(vol * 0.85, time);
                 gainNode.gain.exponentialRampToValueAtTime(0.001, time + 1.5);
                 noise.start(time);
             } else {
@@ -491,6 +524,36 @@
             }
         }
     }
+
+    function playSound(inst, velocity, time) {
+        if (!audioCtx) return;
+        const gainMultiplier = 0.4 + (loudness * 0.6);
+        const vol = (velocity / 127) * gainMultiplier;
+        const isGhost = velocity < drumVelThreshold;
+
+        if (inst === 'Kick') {
+            if (!playWav('kick', vol, time)) playSoundSynth(inst, velocity, time);
+        } else if (inst === 'Snare') {
+            // ghost note: snare_ghost.wav ha van, egyébként snare.wav halványabban
+            if (isGhost) {
+                if (!playWav('snare_ghost', vol, time)) playWav('snare', vol * 0.4, time) || playSoundSynth(inst, velocity, time);
+            } else {
+                if (!playWav('snare', vol, time)) playSoundSynth(inst, velocity, time);
+            }
+        } else if (inst === 'Cymbal') {
+            const type = getCymbalType();
+            if (type === 'Crash') {
+                if (!playWav('crash', vol, time)) playSoundSynth(inst, velocity, time);
+            } else if (type === 'OpenHH') {
+                if (!playWav('hihat_open', vol, time)) playSoundSynth(inst, velocity, time);
+            } else {
+                if (!playWav('hihat_closed', vol, time)) playSoundSynth(inst, velocity, time);
+            }
+        }
+    }
+
+    // Ghost velocity threshold (snare velocity alatt ez) - drumVel 30%-a
+    let drumVelThreshold = 40;
 
     let currentSeed = 0;
     function seededRandom() {
@@ -647,8 +710,8 @@
         timerID = setTimeout(scheduler, lookahead);
     }
 
-    document.getElementById('playBtn').addEventListener('click', function() {
-        initAudio();
+    document.getElementById('playBtn').addEventListener('click', async function() {
+        await initAudio();
         if (isPlaying) {
             isPlaying = false; this.innerText = "PLAY"; clearTimeout(timerID);
         } else {
