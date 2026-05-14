@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Web Drummer - Organic Metal Edition v4.6</title>
+    <title>Web Drummer - Organic Metal Edition v5.3</title>
     <style>
         :root {
             --bg-color: #1a1a1a;
@@ -340,7 +340,7 @@
 <body>
 
 ```
-<h1>Metal Engine <span class="version">v4.6</span></h1>
+<h1>Metal Engine <span class="version">v5.3</span></h1>
 
 <div class="controls-row">
     <button id="playBtn" class="main-btn">PLAY</button>
@@ -636,11 +636,20 @@
         let drumVel = loudness >= 0.5 ? Math.floor(100 + (loudness - 0.5) * 54) : Math.floor(80 + (loudness * 40));
         let cymbalVel = Math.floor(50 + (loudness * 77)); 
 
-        let isDoom = complexity < 0.25;
-        let isRock = complexity >= 0.25 && complexity < 0.60;
-        let isPunk = complexity >= 0.60 && complexity < 0.92;
-        let isBlast = complexity >= 0.92;
-        let isDeathcoreWall = (isBlast && loudness >= 0.85 && complexity >= 0.96);
+        // Zóna határok:
+        // Doom:  0.00 – 0.18  (18%)
+        // Rock:  0.18 – 0.52  (34%) - 1 pergő, legtöbb ghost
+        // Punk:  0.52 – 0.88  (36%) - 2 pergő, legtöbb ghost
+        // Blast: 0.88 – 1.00  (12%)
+        let isDoom = complexity < 0.18;
+        let isRock = complexity >= 0.18 && complexity < 0.52;
+        let isPunk = complexity >= 0.52 && complexity < 0.88;
+        let isBlast = complexity >= 0.88;
+        let isDeathcoreWall = (isBlast && loudness >= 0.85 && complexity >= 0.95);
+
+        // complexity-t újranormalizáljuk zónán belülre (0..1)
+        let rockPos  = isRock  ? (complexity - 0.18) / 0.34 : 0; // 0=rock eleje, 1=rock vége
+        let punkPos  = isPunk  ? (complexity - 0.52) / 0.36 : 0;
 
         for(let i = 0; i < totalSteps; i++) {
             let mI = i % 16; 
@@ -651,37 +660,64 @@
             } else if (isDoom) {
                 if (mI === 8) isSnare = true;
                 if (mI === 0) isKick = true;
-                if (complexity >= 0.07 && mI === 2) isKick = true;
-                if (complexity >= 0.12 && mI === 10) isKick = true;
-                if (complexity >= 0.17 && mI === 14) isKick = true;
-                if (complexity >= 0.21 && mI === 6) isKick = true;
-                if (complexity >= 0.24 && mI === 12) isKick = true;
+                let dp = complexity / 0.18; // 0..1 doom-on belül
+                if (dp >= 0.30 && mI === 2)  isKick = true;
+                if (dp >= 0.50 && mI === 10) isKick = true;
+                if (dp >= 0.70 && mI === 14) isKick = true;
+                if (dp >= 0.85 && mI === 6)  isKick = true;
+                if (dp >= 0.95 && mI === 12) isKick = true;
+
             } else if (isRock) {
-                // Alap: snare 4,12 / kick 0,8
+                // --- 1 PERGŐS ZÓNA ---
+                // Alap snare: 5. és 13. step (mI 4,12)
                 if (mI === 4 || mI === 12) isSnare = true;
+                // Alap kick: 1. és 9. (mI 0,8)
                 if (mI === 0 || mI === 8) isKick = true;
-                // Jobbra: 11. step jon be (mI=10)
-                if (complexity >= 0.32 && mI === 10) isKick = true;
-                // Kicsit jobbra: 9. (mI=8 mar van) -> 9. az mI=8, de az alap
-                // Inkabb: 10. (mI=9) jon be
-                if (complexity >= 0.40 && mI === 9) isKick = true;
-                // Meg jobbra: mI=9 kiesik, helyette mI=6 jon
-                if (complexity >= 0.48) {
-                    if (mI === 6) isKick = true;
-                    if (mI === 9) isKick = false; // kiesik
+
+                // Kick fillek jobbra haladva - fokozatosan sűrűsödik
+                if (rockPos >= 0.15 && mI === 10) isKick = true;          // +11.
+                if (rockPos >= 0.28 && mI === 3)  isKick = true;          // +4.
+                if (rockPos >= 0.40) {
+                    if (mI === 6)  isKick = true;                          // +7.
+                    if (mI === 3)  isKick = false;                         // 4. kiesik
                 }
-                if (complexity >= 0.54 && mI === 14) isKick = true;
-                // Ghost snare-ok loudness szerint
+                if (rockPos >= 0.55 && mI === 14) isKick = true;          // +15.
+                if (rockPos >= 0.70 && mI === 2)  isKick = true;          // +3.
+                if (rockPos >= 0.85 && mI === 13) isKick = true;          // +14.
+
+                // Ghost snare: snare (mI 4,12) előtt (mI 3,11) VAGY után (mI 5,13)
+                // seed páros = előtte, páratlan = utána, hogy ne legyen mindig ugyanott
                 if (!isSnare) {
-                    if (loudness >= 0.35 && (mI === 2 || mI === 14) && seededRandom() < 0.5) isSnare = 'ghost';
-                    if (loudness >= 0.50 && (mI === 6 || mI === 10) && seededRandom() < 0.55) isSnare = 'ghost';
-                    if (loudness >= 0.65 && (mI === 1 || mI === 9) && seededRandom() < 0.4) isSnare = 'ghost';
+                    const rockGhostBefore = seededRandom() < 0.5; // dönt: előtte vagy utána
+                    const ghostBeat1 = rockGhostBefore ? 3 : 5;
+                    const ghostBeat2 = rockGhostBefore ? 11 : 13;
+                    if (mI === ghostBeat1 && seededRandom() < 0.15 + loudness * 0.20 + rockPos * 0.15) isSnare = 'ghost';
+                    if (mI === ghostBeat2 && seededRandom() < 0.15 + loudness * 0.20 + rockPos * 0.15) isSnare = 'ghost';
                 }
+
             } else if (isPunk) {
+                // --- 2 PERGŐS ZÓNA ---
+                // Alap snare: 3,7,11,15 (mI 2,6,10,14) - nyolcadonként
                 if (mI % 4 === 2) isSnare = true;
+                // Alap kick: 1,5,9,13 (mI 0,4,8,12)
                 if (mI % 4 === 0) isKick = true;
-                if (complexity >= 0.68 && (mI === 3 || mI === 11)) isKick = true;
-                if (complexity >= 0.80 && (mI === 7 || mI === 15)) isKick = true;
+
+                // Kick fillek jobbra haladva
+                if (punkPos >= 0.20 && (mI === 3  || mI === 11)) isKick = true;   // +4. és 12.
+                if (punkPos >= 0.40 && (mI === 7  || mI === 15)) isKick = true;   // +8. és 16.
+                if (punkPos >= 0.60 && mI === 1)  isKick = true;                  // +2.
+                if (punkPos >= 0.75 && mI === 9)  isKick = true;                  // +10.
+
+                // Ghost snare: snare-ek (mI 2,6,10,14) előtt (mI 1,5,9,13) VAGY után (mI 3,7,11,15)
+                if (!isSnare) {
+                    const punkGhostBefore = seededRandom() < 0.5;
+                    const offsets = punkGhostBefore ? [-1, -1, -1, -1] : [1, 1, 1, 1];
+                    const snareSteps = [2, 6, 10, 14];
+                    const ghostStep = snareSteps.map((s, idx) => s + offsets[idx]);
+                    // ghostStep = [1,5,9,13] vagy [3,7,11,15]
+                    if (ghostStep.includes(mI) && seededRandom() < 0.15 + loudness * 0.20 + punkPos * 0.15) isSnare = 'ghost';
+                }
+
             } else {
                 // Blast: minden tizenhatod snare+kick felváltva
                 if (mI % 2 !== 0) isSnare = true;
@@ -689,6 +725,7 @@
             }
 
             if (isDoom) {
+                // Doom cymbal: loudness vezérli a dinamikát
                 if (loudness < 0.35) {
                     if (mI % 2 === 0) cV = cymbalVel;
                 } else if (loudness < 0.65) {
@@ -702,19 +739,20 @@
                 } else {
                     if (mI % 4 === 0) cV = cymbalVel;
                 }
-            } else if (loudness < 0.25) {
-                if (mI % 4 === 0 && seededRandom() < (loudness * 4 + 0.3)) cV = cymbalVel * 0.8;
-            } else if (loudness < 0.5) {
+            } else if (isBlast || isDeathcoreWall) {
+                // Blast: csak negyedek, nagyon hangos
                 if (mI % 4 === 0) cV = cymbalVel;
-                else if (mI % 2 === 0) cV = cymbalVel * 0.8;
-            } else if (loudness < 0.75) {
-                if (mI % 4 === 0) cV = Math.min(127, cymbalVel * 1.1);
-                else if (seededRandom() < 0.6) cV = cymbalVel * 0.35;
             } else {
-                if (mI % 4 === 0) cV = cymbalVel;
+                // Rock + Punk: MINDIG tizenhatod alap, negyedeken erős accent
+                // negyed = teli, nyolcad = közepes, tizenhatod "és" = halk ghost
+                if (mI % 4 === 0) {
+                    cV = cymbalVel;                        // negyed: erős
+                } else if (mI % 2 === 0) {
+                    cV = cymbalVel * 0.55;                 // nyolcad: közepes
+                } else {
+                    cV = cymbalVel * 0.30;                 // tizenhatod: halk ghost
+                }
             }
-
-            if ((isBlast || isDeathcoreWall) && loudness >= 0.75 && mI % 4 !== 0) cV = 0;
 
             groove['Kick'][i] = isKick ? drumVel : 0;
             groove['Snare'][i] = isSnare === 'ghost' ? Math.floor(drumVel * 0.3) : (isSnare ? drumVel : 0);
