@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Web Drummer - Organic Metal Edition v5.8</title>
+    <title>Web Drummer - Organic Metal Edition v6.0</title>
     <style>
         :root {
             --bg-color: #1a1a1a;
@@ -126,6 +126,22 @@
     }
 
     .small-btn:active { background-color: #444; }
+
+    .tap-btn-inline {
+        background: none;
+        border: 1px solid #444;
+        color: #777;
+        border-radius: 6px;
+        font-size: 10px;
+        font-weight: bold;
+        letter-spacing: 1px;
+        padding: 3px 10px;
+        cursor: pointer;
+        outline: none;
+        margin-bottom: 4px;
+        width: 100%;
+    }
+    .tap-btn-inline:active { background-color: #333; color: var(--accent); border-color: var(--accent); }
 
     input[type="number"] {
         width: 40px;
@@ -340,12 +356,13 @@
 <body>
 
 ```
-<h1>Metal Engine <span class="version">v5.8</span></h1>
+<h1>Metal Engine <span class="version">v6.0</span></h1>
 
 <div class="controls-row">
     <button id="playBtn" class="main-btn">PLAY</button>
     
     <div class="param-box">
+        <button id="tapBtn" class="tap-btn-inline">TAP</button>
         <div class="param-label">BPM</div>
         <div class="param-controls">
             <button id="bpmMinus" class="small-btn">-</button>
@@ -353,6 +370,7 @@
             <button id="bpmPlus" class="small-btn">+</button>
         </div>
     </div>
+
 
     <div class="param-box">
         <div class="param-label">STEPS</div>
@@ -825,13 +843,6 @@
         timerID = setTimeout(scheduler, lookahead);
     }
 
-    document.addEventListener('keydown', async (e) => {
-        if (e.code === 'Space' && e.target === document.body) {
-            e.preventDefault();
-            document.getElementById('playBtn').click();
-        }
-    });
-
     document.getElementById('playBtn').addEventListener('click', async function() {
         await initAudio();
         if (isPlaying) {
@@ -888,6 +899,29 @@
         let yMapped = 0.5 - (((e.beta - baseBeta) * tiltSensitivity) / 90);
         const rect = xyPad.getBoundingClientRect();
         updateXY(Math.max(0, Math.min(1, xMapped)) * rect.width, Math.max(0, Math.min(1, yMapped)) * rect.height);
+    });
+
+    // Tap tempo
+    let tapTimes = [];
+    let tapTimeout;
+    document.getElementById('tapBtn').addEventListener('click', () => {
+        const now = performance.now();
+        tapTimes.push(now);
+        tapTimes = tapTimes.filter(t => now - t < 2500);
+        clearTimeout(tapTimeout);
+        tapTimeout = setTimeout(() => { tapTimes = []; }, 2500);
+        if (tapTimes.length >= 2) {
+            const intervals = [];
+            for (let i = 1; i < tapTimes.length; i++) intervals.push(tapTimes[i] - tapTimes[i-1]);
+            const avg = intervals.reduce((a,b) => a+b) / intervals.length;
+            updateBpm(Math.round(60000 / avg));
+        }
+    });
+
+    document.addEventListener('keydown', async (e) => {
+        if (e.target !== document.body) return;
+        if (e.code === 'Space') { e.preventDefault(); document.getElementById('playBtn').click(); }
+        if (e.code === 'KeyT')  { e.preventDefault(); document.getElementById('tapBtn').click(); }
     });
 
     initSequencer();
