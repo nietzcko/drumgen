@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Web Drummer - Organic Metal Edition v6.0</title>
+    <title>Web Drummer - Organic Metal Edition v6.6</title>
     <style>
         :root {
             --bg-color: #1a1a1a;
@@ -58,13 +58,25 @@
 
     .controls-row {
         display: flex;
-        justify-content: space-between;
+        flex-direction: column;
         width: 100%;
         max-width: 400px;
         margin-bottom: 20px;
         gap: 8px;
         box-sizing: border-box;
         padding: 0 5px;
+    }
+
+    .controls-top {
+        display: flex;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .controls-bottom {
+        display: flex;
+        gap: 8px;
+        width: 100%;
     }
 
     .main-btn {
@@ -127,21 +139,21 @@
 
     .small-btn:active { background-color: #444; }
 
-    .tap-btn-inline {
-        background: none;
+    .tap-btn {
+        background-color: var(--pad-bg);
+        color: #aaa;
         border: 1px solid #444;
-        color: #777;
-        border-radius: 6px;
-        font-size: 10px;
-        font-weight: bold;
-        letter-spacing: 1px;
-        padding: 3px 10px;
+        padding: 10px 15px;
+        border-radius: 12px;
+        font-size: 14px;
         cursor: pointer;
         outline: none;
-        margin-bottom: 4px;
-        width: 100%;
+        font-weight: bold;
+        text-transform: uppercase;
+        flex: 1;
+        min-width: 0;
     }
-    .tap-btn-inline:active { background-color: #333; color: var(--accent); border-color: var(--accent); }
+    .tap-btn:active { background-color: #444; color: var(--accent); }
 
     input[type="number"] {
         width: 40px;
@@ -356,35 +368,31 @@
 <body>
 
 ```
-<h1>Metal Engine <span class="version">v6.0</span></h1>
+<h1>Metal Engine <span class="version">v6.6</span></h1>
 
 <div class="controls-row">
-    <button id="playBtn" class="main-btn">PLAY</button>
-    
-    <div class="param-box">
-        <button id="tapBtn" class="tap-btn-inline">TAP</button>
-        <div class="param-label">BPM</div>
-        <div class="param-controls">
-            <button id="bpmMinus" class="small-btn">-</button>
-            <input type="number" id="bpmInput" value="140" min="40" max="300">
-            <button id="bpmPlus" class="small-btn">+</button>
+    <div class="controls-top">
+        <button id="playBtn" class="main-btn">PLAY</button>
+        <button id="tapBtn" class="tap-btn">TAP</button>
+    </div>
+    <div class="controls-bottom">
+        <div class="param-box">
+            <div class="param-label">BPM</div>
+            <div class="param-controls">
+                <button id="bpmMinus" class="small-btn">-</button>
+                <input type="number" id="bpmInput" value="140" min="40" max="300">
+                <button id="bpmPlus" class="small-btn">+</button>
+            </div>
+        </div>
+        <div class="param-box">
+            <div class="param-label">STEPS</div>
+            <div class="param-controls">
+                <button id="stepsMinus" class="small-btn">-</button>
+                <input type="number" id="stepsInput" value="16" min="2" max="32">
+                <button id="stepsPlus" class="small-btn">+</button>
+            </div>
         </div>
     </div>
-
-
-    <div class="param-box">
-        <div class="param-label">STEPS</div>
-        <div class="param-controls">
-            <button id="stepsMinus" class="small-btn">-</button>
-            <input type="number" id="stepsInput" value="16" min="2" max="32">
-            <button id="stepsPlus" class="small-btn">+</button>
-        </div>
-    </div>
-</div>
-
-<div class="tilt-wrapper">
-    <input type="checkbox" id="tiltToggle">
-    <label for="tiltToggle">Tilt Control (Calibrates on check)</label>
 </div>
 
 <div class="xy-wrapper">
@@ -398,6 +406,11 @@
 </div>
 
 <div class="sequencer" id="sequencer">
+</div>
+
+<div class="tilt-wrapper">
+    <input type="checkbox" id="tiltToggle">
+    <label for="tiltToggle">Tilt Control (experimental, calibrates on check)</label>
 </div>
 
 <div class="wav-status" id="wavStatus">
@@ -448,14 +461,14 @@
             'hihat_closed': 'hihat_closed.wav', 'hihat_open': 'hihat_open.wav', 'crash': 'crash.wav'
         };
         const descriptions = {
-            'kick': 'Kick drum', 'snare': 'Snare', 'snare_ghost': 'Snare ghost (opcionális)',
+            'kick': 'Kick drum', 'snare': 'Snare', 'snare_ghost': 'Snare ghost (optional)',
             'hihat_closed': 'Closed hi-hat', 'hihat_open': 'Open hi-hat', 'crash': 'Crash cymbal'
         };
         list.innerHTML = Object.entries(labels).map(([key, file]) => {
             const loaded = !!wavBuffers[key];
             return `<div class="wav-item">
                 <span class="filename">${file}</span>
-                <span class="${loaded ? 'wav-ok' : 'wav-missing'}">${loaded ? '✓ betöltve' : descriptions[key] === 'Snare ghost (opcionális)' ? '— szintetizált' : '— szintetizált'}</span>
+                <span class="${loaded ? 'wav-ok' : 'wav-missing'}">${loaded ? '✓ loaded' : descriptions[key] === 'Snare ghost (optional)' ? '— synthesized' : '— synthesized'}</span>
             </div>`;
         }).join('');
     }
@@ -541,13 +554,26 @@
         labelRight.style.color  = labelColor(distRight);
     }
 
-    function getCymbalType() {
-        if (loudness < 0.5) return 'ClosedHH';
-        if (loudness < 0.75) return 'OpenHH';
-        return 'Crash'; 
+    function getCymbalType(mI) {
+        // Loudness zónák:
+        // 0.00 - 0.45: csak closed HH
+        // 0.45 - 0.65: negyed = open HH, többi = closed HH
+        // 0.65 - 0.80: crash negyedeken, open HH nyolcadon, closed 16odon
+        // 0.80 - 1.00: crash mindenhol
+        if (loudness < 0.45) {
+            return 'ClosedHH';
+        } else if (loudness < 0.65) {
+            return (mI % 4 === 0) ? 'OpenHH' : 'ClosedHH';
+        } else if (loudness < 0.80) {
+            if (mI % 4 === 0) return 'Crash';
+            if (mI % 2 === 0) return 'OpenHH';
+            return 'ClosedHH';
+        } else {
+            return 'Crash';
+        }
     }
 
-    function playSoundSynth(inst, velocity, time) {
+    function playSoundSynth(inst, velocity, time, mI) {
         // Fallback szintetizált hangok ha nincs WAV
         const gainMultiplier = 0.4 + (loudness * 0.6);
         const vol = (velocity / 127) * gainMultiplier;
@@ -579,7 +605,7 @@
             gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
             osc.start(time); noise.start(time); osc.stop(time + 0.25);
         } else if (inst === 'Cymbal') {
-            let type = getCymbalType();
+            let type = getCymbalType(mI || 0);
             const noise = audioCtx.createBufferSource();
             if (type === 'Crash') {
                 const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 1.5, audioCtx.sampleRate);
@@ -607,29 +633,28 @@
         }
     }
 
-    function playSound(inst, velocity, time) {
+    function playSound(inst, velocity, time, mI) {
         if (!audioCtx) return;
         const gainMultiplier = 0.4 + (loudness * 0.6);
         const vol = (velocity / 127) * gainMultiplier;
         const isGhost = velocity < drumVelThreshold;
 
         if (inst === 'Kick') {
-            if (!playWav('kick', vol, time)) playSoundSynth(inst, velocity, time);
+            if (!playWav('kick', vol, time)) playSoundSynth(inst, velocity, time, mI);
         } else if (inst === 'Snare') {
-            // ghost note: snare_ghost.wav ha van, egyébként snare.wav halványabban
             if (isGhost) {
-                if (!playWav('snare_ghost', vol, time)) playWav('snare', vol * 0.4, time) || playSoundSynth(inst, velocity, time);
+                if (!playWav('snare_ghost', vol, time)) playWav('snare', vol * 0.4, time) || playSoundSynth(inst, velocity, time, mI);
             } else {
-                if (!playWav('snare', vol, time)) playSoundSynth(inst, velocity, time);
+                if (!playWav('snare', vol, time)) playSoundSynth(inst, velocity, time, mI);
             }
         } else if (inst === 'Cymbal') {
-            const type = getCymbalType();
+            const type = getCymbalType(mI || 0);
             if (type === 'Crash') {
-                if (!playWav('crash', vol, time)) playSoundSynth(inst, velocity, time);
+                if (!playWav('crash', vol, time)) playSoundSynth(inst, velocity, time, mI);
             } else if (type === 'OpenHH') {
-                if (!playWav('hihat_open', vol, time)) playSoundSynth(inst, velocity, time);
+                if (!playWav('hihat_open', vol, time)) playSoundSynth(inst, velocity, time, mI);
             } else {
-                if (!playWav('hihat_closed', vol, time)) playSoundSynth(inst, velocity, time);
+                if (!playWav('hihat_closed', vol, time)) playSoundSynth(inst, velocity, time, mI);
             }
         }
     }
@@ -734,12 +759,34 @@
                 }
 
             } else {
-                // Blast zóna:
-                // Alul (0-0.20): csak snare nyolcadon + ghost tizenhatódon, nincs kick
-                // Felső (0.20-1.0): teljes blast beat, snare+kick tizenhatódon felváltva
-                if (loudness < 0.20) {
-                    if (mI % 2 !== 0) isSnare = true;
-                    if (mI % 2 === 0 && mI % 4 !== 0 && seededRandom() < 0.15 + loudness * 0.40) isSnare = 'ghost';
+                // Blast zone 0-50%: snare full 16th grid (ghost on offbeats), kick grows
+                // 0-10%:  1 kick  (mI 0)
+                // 10-22%: 2 kicks (mI 0, 8)
+                // 22-35%: 4 kicks (mI 0, 4, 8, 12)
+                // 35-50%: 8 kicks (every 8th)
+                // 50%+:   full blast beat
+                if (loudness < 0.50) {
+                    const pos = loudness / 0.50;
+                    // Snare: always full 16th grid, ghost on offbeats
+                    if (mI % 2 === 0) {
+                        isSnare = true;
+                    } else {
+                        isSnare = 'ghost';
+                    }
+                    // Kick: grows in steps
+                    if      (loudness < 0.10) { if (mI === 0) isKick = true; }
+                    else if (loudness < 0.22) { if (mI === 0 || mI === 8) isKick = true; }
+                    else if (loudness < 0.35) { if (mI % 4 === 0) isKick = true; }
+                    else                       { if (mI % 2 === 0) isKick = true; }
+
+                    // Velocity grows with pos
+                    groove['Kick'][i]  = isKick ? Math.floor(40 + pos * 87) : 0;
+                    const snareV = isSnare === 'ghost'
+                        ? Math.floor(15 + pos * 55)
+                        : Math.floor(50 + pos * 77);
+                    groove['Snare'][i] = snareV;
+                    groove['Cymbal'][i] = cV;
+                    continue;
                 } else {
                     if (mI % 2 !== 0) isSnare = true;
                     if (mI % 2 === 0) isKick = true;
@@ -748,39 +795,43 @@
 
             if (isDoom) {
                 // Doom cymbal: loudness vezérli a dinamikát
-                if (loudness < 0.35) {
-                    if (mI % 2 === 0) cV = cymbalVel;
-                } else if (loudness < 0.65) {
+                if (loudness < 0.25) {
+                    // Alul: csak negyedek
                     if (mI % 4 === 0) cV = cymbalVel;
-                    else if (mI % 2 === 0) cV = cymbalVel * 0.45;
-                    else if (seededRandom() < 0.35) cV = cymbalVel * 0.25;
+                } else if (loudness < 0.45) {
+                    // Nyolcadok
+                    if (mI % 4 === 0) cV = cymbalVel;
+                    else if (mI % 2 === 0) cV = cymbalVel * 0.55;
+                } else if (loudness < 0.65) {
+                    // Tizenhatódok - minden step
+                    if (mI % 4 === 0) cV = cymbalVel;
+                    else if (mI % 2 === 0) cV = cymbalVel * 0.55;
+                    else cV = cymbalVel * 0.28;
                 } else if (loudness < 0.85) {
+                    // Ghost note-os tizenhatódok
                     if (mI % 4 === 0) cV = cymbalVel;
                     else if (mI % 2 === 0) cV = cymbalVel * 0.6;
                     else if (seededRandom() < 0.55) cV = cymbalVel * 0.3;
                 } else {
+                    // Teteje: csak negyedek, nyers
                     if (mI % 4 === 0) cV = cymbalVel;
                 }
             } else if (isBlast) {
-                // Blast cin: negyed erős, néha nyolcad, néha tizenhatód
-                const blastSixteenths = seededRandom() < 0.40;
+                // Blast: mindig tizenhatód grid
                 if (mI % 4 === 0) {
                     cV = cymbalVel;
                 } else if (mI % 2 === 0) {
                     cV = cymbalVel * 0.55;
-                } else if (blastSixteenths) {
+                } else {
                     cV = cymbalVel * 0.28;
                 }
             } else {
-                // Rock + Punk: negyed mindig erős
-                // seed alapján néha nyolcados, néha tizenhatodos feel
-                // loudness NEM sűríti - csak a seed dönti el
-                const useSixteenths = seededRandom() < 0.45; // ~45% eséllyel tizenhatód feel
+                // Rock + Punk: mindig tizenhatód grid, negyed erős, nyolcad közepes, 16od halk
                 if (mI % 4 === 0) {
                     cV = cymbalVel;
                 } else if (mI % 2 === 0) {
                     cV = cymbalVel * 0.55;
-                } else if (useSixteenths) {
+                } else {
                     cV = cymbalVel * 0.28;
                 }
             }
@@ -835,7 +886,7 @@
         while (nextNoteTime < audioCtx.currentTime + scheduleAheadTime) {
             let s = currentStep;
             setTimeout(() => { if (isPlaying) highlightStep(s); }, (nextNoteTime - audioCtx.currentTime) * 1000);
-            instruments.forEach(inst => { if (groove[inst][currentStep] > 0) playSound(inst, groove[inst][currentStep], nextNoteTime); });
+            instruments.forEach(inst => { if (groove[inst][currentStep] > 0) playSound(inst, groove[inst][currentStep], nextNoteTime, currentStep % 16); });
             const secondsPerBeat = 60.0 / bpm;
             nextNoteTime += 0.25 * secondsPerBeat;
             currentStep = (currentStep + 1) % totalSteps;
