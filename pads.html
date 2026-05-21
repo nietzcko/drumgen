@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Metal Finger Drummer</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --pad-bg: #2a2a2a;
+            --accent: #e53935;
+            --text-color: #888;
+        }
+
+        html {
+            background-color: var(--bg-color);
+            min-height: 100%;
+        }
+
+        body {
+            -webkit-tap-highlight-color: transparent;
+            min-height: 100vh;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px 10px 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            color: var(--accent);
+            font-size: 24px;
+            margin-bottom: 5px;
+            font-weight: 900;
+            text-transform: uppercase;
+            text-align: center;
+            letter-spacing: 2px;
+        }
+
+        .subtitle {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .pad-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            width: 100%;
+            max-width: 450px;
+            margin-bottom: 30px;
+        }
+
+        .pad {
+            background-color: var(--pad-bg);
+            border: 2px solid #333;
+            border-radius: 15px;
+            aspect-ratio: 1 / 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: var(--text-color);
+            font-weight: bold;
+            font-size: 14px;
+            text-transform: uppercase;
+            cursor: pointer;
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.5);
+            transition: background-color 0.05s, transform 0.05s, color 0.05s, border-color 0.05s;
+        }
+
+        .pad:active, .pad.active {
+            background-color: #3a1111;
+            border-color: var(--accent);
+            color: var(--accent);
+            transform: scale(0.96);
+            box-shadow: inset 0 0 20px rgba(229, 57, 53, 0.2), 0 0 15px rgba(229, 57, 53, 0.4);
+        }
+
+        .key-hint {
+            display: block;
+            font-size: 10px;
+            color: #555;
+            margin-top: 4px;
+        }
+
+        .wav-status {
+            width: 100%;
+            max-width: 450px;
+            background: #222;
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 10px 12px;
+            box-sizing: border-box;
+            font-size: 11px;
+            color: #666;
+        }
+
+        .wav-status-title {
+            color: #aaa;
+            font-size: 10px;
+            letter-spacing: 1px;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        .wav-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 2px 0;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        .wav-item:last-child { border-bottom: none; }
+        .wav-item .filename { color: #777; font-family: monospace; }
+        .wav-ok { color: #4caf50; }
+        .wav-missing { color: #e53935; }
+
+    </style>
+</head>
+<body>
+
+    <h1>Metal Finger Drummer</h1>
+    <div class="subtitle">Tap pads or use QWE / ASD / ZXC keys</div>
+
+    <div class="pad-grid">
+        <div class="pad" data-sound="crash" data-key="KeyQ">
+            <div>CRASH<span class="key-hint">(Q)</span></div>
+        </div>
+        <div class="pad" data-sound="snare_ghost" data-key="KeyW">
+            <div>S. GHOST<span class="key-hint">(W)</span></div>
+        </div>
+        <div class="pad" data-sound="crash" data-key="KeyE">
+            <div>CRASH<span class="key-hint">(E)</span></div>
+        </div>
+
+        <div class="pad" data-sound="snare" data-key="KeyA">
+            <div>SNARE<span class="key-hint">(A)</span></div>
+        </div>
+        <div class="pad" data-sound="hihat_closed" data-key="KeyS">
+            <div>HH CLS<span class="key-hint">(S)</span></div>
+        </div>
+        <div class="pad" data-sound="snare" data-key="KeyD">
+            <div>SNARE<span class="key-hint">(D)</span></div>
+        </div>
+
+        <div class="pad" data-sound="kick" data-key="KeyZ">
+            <div>KICK<span class="key-hint">(Z)</span></div>
+        </div>
+        <div class="pad" data-sound="hihat_open" data-key="KeyX">
+            <div>HH OPN<span class="key-hint">(X)</span></div>
+        </div>
+        <div class="pad" data-sound="kick" data-key="KeyC">
+            <div>KICK<span class="key-hint">(C)</span></div>
+        </div>
+    </div>
+
+    <div class="wav-status" id="wavStatus">
+        <div class="wav-status-title">SAMPLE ENGINE</div>
+        <div id="wavList"></div>
+    </div>
+
+    <script>
+        let audioCtx;
+        const wavBuffers = {};
+        const wavFiles = {
+            'kick':         'kick.wav',
+            'snare':        'snare.wav',
+            'snare_ghost':  'snare_ghost.wav',
+            'hihat_closed': 'hihat_closed.wav',
+            'hihat_open':   'hihat_open.wav',
+            'crash':        'crash.wav',
+        };
+
+        function updateWavStatusUI() {
+            const list = document.getElementById('wavList');
+            if (!list) return;
+            const labels = {
+                'kick': 'kick.wav', 'snare': 'snare.wav', 'snare_ghost': 'snare_ghost.wav',
+                'hihat_closed': 'hihat_closed.wav', 'hihat_open': 'hihat_open.wav', 'crash': 'crash.wav'
+            };
+            list.innerHTML = Object.entries(labels).map(([key, file]) => {
+                const loaded = !!wavBuffers[key];
+                return `<div class="wav-item">
+                    <span class="filename">${file}</span>
+                    <span class="${loaded ? 'wav-ok' : 'wav-missing'}">${loaded ? '✓ loaded' : '— synthesized'}</span>
+                </div>`;
+            }).join('');
+        }
+
+        async function loadWavBuffers() {
+            for (const [key, file] of Object.entries(wavFiles)) {
+                try {
+                    const res = await fetch(file);
+                    if (!res.ok) continue;
+                    const arrayBuf = await res.arrayBuffer();
+                    wavBuffers[key] = await audioCtx.decodeAudioData(arrayBuf);
+                } catch(e) {
+                    // Fallback to synth if file missing
+                }
+            }
+            updateWavStatusUI();
+        }
+
+        async function initAudio() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+                await loadWavBuffers();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => updateWavStatusUI());
+
+        function playWav(key, vol = 1.0) {
+            if (!wavBuffers[key]) return false;
+            const src = audioCtx.createBufferSource();
+            src.buffer = wavBuffers[key];
+            const gain = audioCtx.createGain();
+            gain.gain.value = Math.min(1, vol);
+            src.connect(gain);
+            gain.connect(audioCtx.destination);
+            src.start(0);
+            return true;
+        }
+
+        // Direct synthesizer fallback modified for one-shot pad triggers
+        function playSoundSynth(type, vol = 0.8) {
+            const time = audioCtx.currentTime;
+            const gainNode = audioCtx.createGain();
+            gainNode.gain.setValueAtTime(vol, time);
+            gainNode.connect(audioCtx.destination);
+
+            if (type === 'kick') {
+                const osc = audioCtx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(250, time);
+                osc.frequency.exponentialRampToValueAtTime(0.001, time + 0.2);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
+                osc.connect(gainNode);
+                osc.start(time); osc.stop(time + 0.2);
+            } else if (type === 'snare' || type === 'snare_ghost') {
+                const osc = audioCtx.createOscillator();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(200, time);
+                const noise = audioCtx.createBufferSource();
+                const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.25, audioCtx.sampleRate);
+                const output = buffer.getChannelData(0);
+                for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
+                noise.buffer = buffer;
+                const noiseFilter = audioCtx.createBiquadFilter();
+                noiseFilter.type = 'highpass';
+                noiseFilter.frequency.value = 1000;
+                noise.connect(noiseFilter); noiseFilter.connect(gainNode); osc.connect(gainNode);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
+                osc.start(time); noise.start(time); osc.stop(time + 0.25);
+            } else if (type === 'crash') {
+                const noise = audioCtx.createBufferSource();
+                const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 1.5, audioCtx.sampleRate);
+                const output = buffer.getChannelData(0);
+                for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
+                noise.buffer = buffer;
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'highpass'; filter.frequency.value = 4000;
+                noise.connect(filter); filter.connect(gainNode);
+                gainNode.gain.setValueAtTime(vol * 0.85, time);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, time + 1.5);
+                noise.start(time);
+            } else if (type === 'hihat_closed' || type === 'hihat_open') {
+                const noise = audioCtx.createBufferSource();
+                const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.5, audioCtx.sampleRate);
+                const output = buffer.getChannelData(0);
+                for (let i = 0; i < output.length; i++) output[i] = Math.random() * 2 - 1;
+                noise.buffer = buffer;
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'highpass'; 
+                filter.frequency.value = type === 'hihat_open' ? 5000 : 7000;
+                noise.connect(filter); filter.connect(gainNode);
+                let decay = type === 'hihat_open' ? 0.4 : 0.08;
+                gainNode.gain.exponentialRampToValueAtTime(0.001, time + decay);
+                noise.start(time);
+            }
+        }
+
+        // Main play function that tries WAV first, then falls back to synth
+        function playDrum(soundType) {
+            let volume = soundType === 'snare_ghost' ? 0.4 : 1.0;
+            
+            // Attempt to play WAV
+            if (!playWav(soundType, volume)) {
+                // Synthesize if missing
+                playSoundSynth(soundType, volume);
+            }
+        }
+
+        // UI Interactions
+        const pads = document.querySelectorAll('.pad');
+        
+        pads.forEach(pad => {
+            pad.addEventListener('pointerdown', async (e) => {
+                e.preventDefault();
+                if (!audioCtx) await initAudio();
+                pad.classList.add('active');
+                playDrum(pad.getAttribute('data-sound'));
+            });
+
+            // Remove active state
+            pad.addEventListener('pointerup', () => pad.classList.remove('active'));
+            pad.addEventListener('pointerleave', () => pad.classList.remove('active'));
+            pad.addEventListener('pointercancel', () => pad.classList.remove('active'));
+        });
+
+        // Keyboard mappings
+        document.addEventListener('keydown', async (e) => {
+            if (e.repeat) return; // Prevent machine-gunning if key is held down
+            
+            const pad = document.querySelector(`.pad[data-key="${e.code}"]`);
+            if (pad) {
+                if (!audioCtx) await initAudio();
+                pad.classList.add('active');
+                playDrum(pad.getAttribute('data-sound'));
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            const pad = document.querySelector(`.pad[data-key="${e.code}"]`);
+            if (pad) pad.classList.remove('active');
+        });
+
+    </script>
+</body>
+</html>
