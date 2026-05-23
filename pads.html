@@ -30,8 +30,9 @@
             align-items: center;
             user-select: none;
             -webkit-user-select: none;
-            touch-action: none; /* Blocks default browser zoom/pan gestures */
+            touch-action: none; /* Blocks default browser zoom/pan gestures on the whole page */
             box-sizing: border-box;
+            overflow: hidden; /* Prevents scrolling */
         }
 
         h1 {
@@ -75,6 +76,7 @@
             cursor: pointer;
             box-shadow: inset 0 0 15px rgba(0,0,0,0.5);
             transition: background-color 0.05s, transform 0.05s, color 0.05s, border-color 0.05s;
+            touch-action: none; /* Physically blocks gestures on pads */
         }
 
         .pad:active, .pad.active {
@@ -136,7 +138,7 @@
             <div>CRASH<span class="key-hint">(Q)</span></div>
         </div>
         <div class="pad" data-sound="snare_ghost" data-key="KeyW">
-            <div>S. GHOST<span class="key-hint">(W)</span></div>
+            <div>RIM GHOST<span class="key-hint">(W)</span></div>
         </div>
         <div class="pad" data-sound="crash" data-key="KeyE">
             <div>CRASH<span class="key-hint">(E)</span></div>
@@ -327,17 +329,33 @@
         const pads = document.querySelectorAll('.pad');
         
         pads.forEach(pad => {
-            pad.addEventListener('pointerdown', async (e) => {
+            // MOBILE: Use touchstart for zero-latency playing and to heavily block zoom
+            pad.addEventListener('touchstart', async (e) => {
+                e.preventDefault(); // Instantly blocks double-tap zoom
+                if (!audioCtx) await initAudio();
+                pad.classList.add('active');
+                playDrum(pad.getAttribute('data-sound'));
+            }, { passive: false });
+
+            pad.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                pad.classList.remove('active');
+            }, { passive: false });
+
+            pad.addEventListener('touchcancel', (e) => {
+                pad.classList.remove('active');
+            });
+
+            // DESKTOP: Fallback for mouse clicks
+            pad.addEventListener('mousedown', async (e) => {
                 e.preventDefault();
                 if (!audioCtx) await initAudio();
                 pad.classList.add('active');
                 playDrum(pad.getAttribute('data-sound'));
             });
 
-            // Remove active state
-            pad.addEventListener('pointerup', () => pad.classList.remove('active'));
-            pad.addEventListener('pointerleave', () => pad.classList.remove('active'));
-            pad.addEventListener('pointercancel', () => pad.classList.remove('active'));
+            pad.addEventListener('mouseup', () => pad.classList.remove('active'));
+            pad.addEventListener('mouseleave', () => pad.classList.remove('active'));
         });
 
         // Keyboard mappings
