@@ -555,21 +555,21 @@
     }
 
     function getCymbalType(mI) {
-        // Loudness zónák:
-        // 0.00 - 0.45: csak closed HH
-        // 0.45 - 0.65: negyed = open HH, többi = closed HH
-        // 0.65 - 0.80: crash negyedeken, open HH nyolcadon, closed 16odon
-        // 0.80 - 1.00: crash mindenhol
-        if (loudness < 0.45) {
+        // Metal cymbal voicing by loudness:
+        //  low      : tight closed hat (gallop riding)
+        //  mid      : RIDE with BELL accents on the beat (the metal staple)
+        //  high     : crash/china on downbeats, ride bell between — not wall-to-wall
+        if (loudness < 0.42) {
             return 'ClosedHH';
-        } else if (loudness < 0.65) {
+        } else if (loudness < 0.66) {
+            // ride: bell (accent) on quarters, bow elsewhere -> use OpenHH as "ride bell"
             return (mI % 4 === 0) ? 'OpenHH' : 'ClosedHH';
-        } else if (loudness < 0.80) {
-            if (mI % 4 === 0) return 'Crash';
-            if (mI % 2 === 0) return 'OpenHH';
-            return 'ClosedHH';
+        } else if (loudness < 0.85) {
+            if (mI % 4 === 0) return 'Crash';   // crash/china on each beat
+            return 'OpenHH';                     // ride between
         } else {
-            return 'Crash';
+            // top end: crash on the beat, ride bell on the offbeats (controlled wall)
+            return (mI % 2 === 0) ? 'Crash' : 'OpenHH';
         }
     }
 
@@ -637,7 +637,7 @@
         if (!audioCtx) return;
         const gainMultiplier = 0.4 + (loudness * 0.6);
         const vol = (velocity / 127) * gainMultiplier;
-        const isGhost = velocity < drumVelThreshold;
+        const isGhost = velocity < drumVelThresholdGhost;
 
         if (inst === 'Kick') {
             if (!playWav('kick', vol, time)) playSoundSynth(inst, velocity, time, mI);
@@ -662,186 +662,315 @@
     // Ghost velocity threshold (snare velocity alatt ez) - drumVel 30%-a
     let drumVelThreshold = 40;
 
-    let currentSeed = 0;
-    function seededRandom() {
-        let x = Math.sin(currentSeed++) * 10000;
-        return x - Math.floor(x);
+    // Ghost velocity threshold (below this = ghost snare sample)
+    let drumVelThresholdGhost = 45;
+
+    // ---- Proper PRNG (mulberry32): uniform, deterministic, no Math.sin clumping ----
+    let _rngState = 0;
+    function seedRng(s) { _rngState = (s >>> 0) || 1; }
+    function rng() {
+        _rngState |= 0; _rngState = (_rngState + 0x6D2B79F5) | 0;
+        let t = Math.imul(_rngState ^ (_rngState >>> 15), 1 | _rngState);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    }
+    function chance(p) { return rng() < p; }
+    // back-compat alias
+    function seededRandom() { return rng(); }
+
+    /*
+       GROOVE ENGINE v7
+       ----------------
+       Patterns are stored as ONE-BAR (16th) skeletons per zone, expressed as
+       musical events rather than blind per-step toggles. A skeleton defines:
+         k: kick step indices, s: backbeat snare step indices,
+         g: candidate ghost-snare steps, feel: 'straight'|'swing'
+       generateGroove() lays the skeleton across the whole sequence bar-by-bar,
+       humanizes velocity + adds an accent structure, sprinkles ghosts by
+       probability, and replaces the final bar of a 2-bar phrase with a fill.
+       Cymbal lane carries hi-hat / ride / crash density driven by loudness.
+    */
+
+    // Pick a value from an array using the seeded rng
+    function pick(arr) { return arr[Math.floor(rng() * arr.length)]; }
+
+    // ---- DOUBLE-BASS FIGURE LIBRARY ----
+    // Real metal double-bass is phrased, not a flat 16th drone. Each figure is a
+    // one-bar set of kick step indices that LOCKS with the backbeat (it leaves
+    // room around beats 2 & 4, or deliberately plays through them for intensity).
+    // Figures are grouped by intensity tier; we pick within a tier with the RNG
+    // so adjacent pad cells give variation instead of the same drone.
+    const DBASS_FIGURES = {
+        // tier 1: gallops & half-feel — feet phrase in 3s/2s, backbeat stays clear
+        light: [
+            [0, 3, 4, 7, 8, 11, 12, 15],        // straight gallop: beat + "a"
+            [0, 1, 4, 5, 8, 9, 12, 13],         // reverse gallop: beat + "e"
+            [0, 2, 3, 8, 10, 11],               // burst-rest-burst (two-bar feel)
+            [0, 3, 6, 8, 11, 14],               // dotted / swung doubles
+        ],
+        // tier 2: driving 16ths with gaps that breathe around the snare
+        mid: [
+            [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14],  // 3-note bursts off each beat
+            [0, 2, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15],  // skip-step stutter
+            [0, 1, 2, 8, 9, 10, 4, 6, 12, 14],          // bursts on 1&3, doubles on 2&4
+            [0, 3, 4, 5, 7, 8, 11, 12, 13, 15],         // syncopated gallop chain
+        ],
+        // tier 3: relentless but still phrased — accented groupings, not pure drone
+        heavy: [
+            [0,1,2,3, 6,7, 8,9,10,11, 14,15],     // 4-group / 2-group alternation
+            [0,1,2, 4,5,6, 8,9,10, 12,13,14],      // groups of 3 (triplet-feel over 16ths)
+            [0,1,2,3,4,5,6,7, 10,11, 14,15],       // run then stutter
+            [0,1,3,4, 6,7,8,9, 11,12, 14,15],      // displaced groupings
+        ],
+    };
+
+    // Build the kick skeleton for a zone, scaled by intra-zone position (0..1).
+    // METAL: loudness (Y) drives a RHYTHMIC double-bass figure on top of the
+    // zone's base groove — not a flat 16th wall.
+    function kickPattern(zone, pos, bar) {
+        let k;
+        if (zone === 'doom') {
+            // Sparse, heavy base. Beat 1 always; fill in as pos grows.
+            k = [0];
+            if (pos >= 0.30) k.push(8);
+            if (pos >= 0.55) k.push(10);
+            if (pos >= 0.80) k.push(14);
+        } else if (zone === 'rock') {
+            // Mid-tempo metal: syncopated kick under the backbeat.
+            const sets = [
+                [0, 8],
+                [0, 6, 8],
+                [0, 3, 8, 10],
+                [0, 6, 8, 11, 14],
+            ];
+            k = sets[Math.min(sets.length - 1, Math.floor(pos * sets.length))].slice();
+        } else if (zone === 'punk') {
+            // D-beat / thrash drive: steady 8ths, denser to the right.
+            const sets = [
+                [0, 4, 8, 12],
+                [0, 3, 4, 8, 11, 12],
+                [0, 2, 4, 8, 10, 12],
+                [0, 2, 4, 6, 8, 10, 12, 14],
+            ];
+            k = sets[Math.min(sets.length - 1, Math.floor(pos * sets.length))].slice();
+        } else {
+            // blast base
+            k = [0, 4, 8, 12];
+        }
+
+        // ---- RHYTHMIC DOUBLE-BASS LAYER ----
+        // Choose a figure tier from loudness, then pick a specific figure with the
+        // RNG. Re-pick per bar (offset the rng by bar) so two-bar phrases breathe.
+        let tier = null;
+        if      (loudness >= 0.55 && loudness < 0.72) tier = 'light';
+        else if (loudness >= 0.72 && loudness < 0.86) tier = 'mid';
+        else if (loudness >= 0.86)                    tier = 'heavy';
+
+        if (tier) {
+            const figs = DBASS_FIGURES[tier];
+            // bar-dependent pick: vary the figure across the phrase but stay coherent
+            const fig = figs[Math.floor(rng() * figs.length)];
+            // doom keeps it more reserved — only merge a sparser slice of the figure
+            if (zone === 'doom') {
+                fig.forEach(s => { if (s % 2 === 0 || rng() < 0.4) k.push(s); });
+            } else {
+                fig.forEach(s => k.push(s));
+            }
+        }
+        return [...new Set(k)].sort((a, b) => a - b);
+    }
+
+    // Snare backbeat per zone
+    function snarePattern(zone) {
+        if (zone === 'doom') return [8];            // half-time, beat 3
+        if (zone === 'rock') return [4, 12];        // 2 and 4
+        if (zone === 'punk') return [4, 12];        // 2 and 4 (d-beat backbeat)
+        // blast: snare alternates with kick on the offbeat 16ths (handled specially)
+        return [2, 6, 10, 14];
+    }
+
+    // Candidate ghost-note steps (will be gated by probability)
+    function ghostCandidates(zone) {
+        if (zone === 'doom') return [11, 14];
+        if (zone === 'rock') return [3, 7, 10, 11, 15];
+        if (zone === 'punk') return [2, 6, 10, 14];
+        return [2, 6, 10, 14];
+    }
+
+    // A small library of one-bar fills (snare/tom-style bursts) for phrase ends.
+    // Represented on the snare lane as accented 16ths leading to the downbeat.
+    function pickFill(zone, intensity) {
+        const fills = [
+            [12, 13, 14, 15],
+            [10, 11, 12, 13, 14, 15],
+            [8, 10, 12, 13, 14, 15],
+            [12, 14, 15],
+            [11, 13, 14, 15],
+        ];
+        // heavier zones / louder => busier fill
+        const bias = Math.min(fills.length - 1, Math.floor(intensity * fills.length));
+        // still allow some variety around the bias
+        const lo = Math.max(0, bias - 1);
+        const choice = lo + Math.floor(rng() * (fills.length - lo));
+        return fills[Math.min(fills.length - 1, choice)];
+    }
+
+    // Humanize a base velocity: accent on downbeats, slight random drift.
+    function humanize(base, stepInBar, isAccent) {
+        let v = base;
+        if (isAccent) v += 8;
+        // beat-position accenting: beats (0,4,8,12) loudest, offbeats softer
+        const sub = stepInBar % 4;
+        if (sub === 0) v += 6;
+        else if (sub === 2) v += 2;
+        else v -= 4;
+        // random drift ±6 for human feel
+        v += Math.floor((rng() - 0.5) * 12);
+        return Math.max(1, Math.min(127, Math.round(v)));
     }
 
     function generateGroove() {
-        for(let inst in groove) {
-            groove[inst] = new Array(totalSteps).fill(0);
-        }
-        let zoneX = Math.floor(complexity * 25);
-        let zoneY = Math.floor(loudness * 25);
-        currentSeed = zoneX + (zoneY * 100); 
+        for (let inst in groove) groove[inst] = new Array(totalSteps).fill(0);
 
-        let drumVel = loudness >= 0.5 ? Math.floor(100 + (loudness - 0.5) * 54) : Math.floor(80 + (loudness * 40));
-        let cymbalVel = Math.floor(80 + (loudness * 47)); // velocity stable, density varies
+        // Deterministic per XY cell, but fine-grained enough to vary across the pad
+        let zoneX = Math.floor(complexity * 40);
+        let zoneY = Math.floor(loudness * 40);
+        seedRng(zoneX * 131 + zoneY * 977 + 17);
 
-        // Zóna határok:
-        // Doom:  0.00 – 0.18  (18%)
-        // Rock:  0.18 – 0.52  (34%) - 1 pergő, legtöbb ghost
-        // Punk:  0.52 – 0.88  (36%) - 2 pergő, legtöbb ghost
-        // Blast: 0.88 – 1.00  (12%)
-        let isDoom = complexity < 0.18;
-        let isRock = complexity >= 0.18 && complexity < 0.52;
-        let isPunk = complexity >= 0.52 && complexity < 0.88;
-        let isBlast = complexity >= 0.88;
+        // Zone boundaries (kept conceptually; tuned for musicality)
+        let zone, pos;
+        if (complexity < 0.18) { zone = 'doom';  pos = complexity / 0.18; }
+        else if (complexity < 0.52) { zone = 'rock';  pos = (complexity - 0.18) / 0.34; }
+        else if (complexity < 0.88) { zone = 'punk';  pos = (complexity - 0.52) / 0.36; }
+        else { zone = 'blast'; pos = (complexity - 0.88) / 0.12; }
 
-        // complexity-t újranormalizáljuk zónán belülre (0..1)
-        let rockPos  = isRock  ? (complexity - 0.18) / 0.34 : 0; // 0=rock eleje, 1=rock vége
-        let punkPos  = isPunk  ? (complexity - 0.52) / 0.36 : 0;
+        // Base velocities driven by loudness (Y axis)
+        const kickBase  = Math.round(70 + loudness * 50);
+        const snareBase = Math.round(72 + loudness * 50);
+        const ghostBase = Math.round(22 + loudness * 18);
+        const cymBase   = Math.round(60 + loudness * 45);
 
-        for(let i = 0; i < totalSteps; i++) {
-            let mI = i % 16; 
-            let isSnare = false; let isKick = false; let cV = 0;
+        const snares = snarePattern(zone);
+        const ghosts = ghostCandidates(zone);
+        // ghost density rises with loudness and intra-zone position
+        const ghostProb = 0.12 + loudness * 0.30 + pos * 0.18;
 
-            if (isDoom) {
-                if (mI === 8) isSnare = true;
-                if (mI === 0) isKick = true;
-                let dp = complexity / 0.18; // 0..1 doom-on belül
-                if (dp >= 0.30 && mI === 2)  isKick = true;
-                if (dp >= 0.50 && mI === 10) isKick = true;
-                if (dp >= 0.70 && mI === 14) isKick = true;
-                if (dp >= 0.85 && mI === 6)  isKick = true;
-                if (dp >= 0.95 && mI === 12) isKick = true;
+        const bars = Math.ceil(totalSteps / 16);
+        // A true blast beat at high intensity: kick and snare alternate on 16ths.
+        const isTrueBlast = (zone === 'blast') && (loudness >= 0.5);
 
-            } else if (isRock) {
-                // --- 1 PERGŐS ZÓNA ---
-                // Alap snare: 5. és 13. step (mI 4,12)
-                if (mI === 4 || mI === 12) isSnare = true;
-                // Alap kick: 1. és 9. (mI 0,8)
-                if (mI === 0 || mI === 8) isKick = true;
+        for (let bar = 0; bar < bars; bar++) {
+            const barStart = bar * 16;
+            // Last bar of every 2-bar phrase becomes a fill (only if there's room)
+            const isFillBar = (bars > 1) && (bar % 2 === 1) && (barStart + 8 < totalSteps);
+            const fillSteps = isFillBar ? pickFill(zone, (pos + loudness) / 2) : null;
+            // Fresh double-bass figure each bar so the phrase breathes & varies
+            const kicks = kickPattern(zone, pos, bar);
 
-                // Kick fillek jobbra haladva - fokozatosan sűrűsödik
-                if (rockPos >= 0.15 && mI === 10) isKick = true;          // +11.
-                if (rockPos >= 0.28 && mI === 3)  isKick = true;          // +4.
-                if (rockPos >= 0.40) {
-                    if (mI === 6)  isKick = true;                          // +7.
-                    if (mI === 3)  isKick = false;                         // 4. kiesik
-                }
-                if (rockPos >= 0.55 && mI === 14) isKick = true;          // +15.
-                if (rockPos >= 0.70 && mI === 2)  isKick = true;          // +3.
-                if (rockPos >= 0.85 && mI === 13) isKick = true;          // +14.
+            for (let mI = 0; mI < 16; mI++) {
+                const i = barStart + mI;
+                if (i >= totalSteps) break;
 
-                // Ghost snare: snare (mI 4,12) előtt (mI 3,11) VAGY után (mI 5,13)
-                // seed páros = előtte, páratlan = utána, hogy ne legyen mindig ugyanott
-                if (!isSnare) {
-                    const rockGhostBefore = seededRandom() < 0.5; // dönt: előtte vagy utána
-                    const ghostBeat1 = rockGhostBefore ? 3 : 5;
-                    const ghostBeat2 = rockGhostBefore ? 11 : 13;
-                    if (mI === ghostBeat1 && seededRandom() < 0.15 + loudness * 0.20 + rockPos * 0.15) isSnare = 'ghost';
-                    if (mI === ghostBeat2 && seededRandom() < 0.15 + loudness * 0.20 + rockPos * 0.15) isSnare = 'ghost';
-                }
-
-            } else if (isPunk) {
-                // --- 2 PERGŐS ZÓNA ---
-                // Alap snare: 3,7,11,15 (mI 2,6,10,14) - nyolcadonként
-                if (mI % 4 === 2) isSnare = true;
-                // Alap kick: 1,5,9,13 (mI 0,4,8,12)
-                if (mI % 4 === 0) isKick = true;
-
-                // Kick fillek jobbra haladva
-                if (punkPos >= 0.20 && (mI === 3  || mI === 11)) isKick = true;   // +4. és 12.
-                if (punkPos >= 0.40 && (mI === 7  || mI === 15)) isKick = true;   // +8. és 16.
-                if (punkPos >= 0.60 && mI === 1)  isKick = true;                  // +2.
-                if (punkPos >= 0.75 && mI === 9)  isKick = true;                  // +10.
-
-                // Ghost snare: snare-ek (mI 2,6,10,14) előtt (mI 1,5,9,13) VAGY után (mI 3,7,11,15)
-                if (!isSnare) {
-                    const punkGhostBefore = seededRandom() < 0.5;
-                    const offsets = punkGhostBefore ? [-1, -1, -1, -1] : [1, 1, 1, 1];
-                    const snareSteps = [2, 6, 10, 14];
-                    const ghostStep = snareSteps.map((s, idx) => s + offsets[idx]);
-                    // ghostStep = [1,5,9,13] vagy [3,7,11,15]
-                    if (ghostStep.includes(mI) && seededRandom() < 0.15 + loudness * 0.20 + punkPos * 0.15) isSnare = 'ghost';
-                }
-
-            } else {
-                // Blast zone 0-50%: snare full 16th grid (ghost on offbeats), kick grows
-                // 0-10%:  1 kick  (mI 0)
-                // 10-22%: 2 kicks (mI 0, 8)
-                // 22-35%: 4 kicks (mI 0, 4, 8, 12)
-                // 35-50%: 8 kicks (every 8th)
-                // 50%+:   full blast beat
-                if (loudness < 0.50) {
-                    const pos = loudness / 0.50;
-                    // Snare: always full 16th grid, ghost on offbeats
+                // ===== TRUE BLAST BEAT: alternating kick(even)/snare(odd) 16ths =====
+                if (isTrueBlast && !isFillBar) {
                     if (mI % 2 === 0) {
-                        isSnare = true;
+                        groove['Kick'][i] = humanize(kickBase, mI, mI === 0);
                     } else {
-                        isSnare = 'ghost';
+                        groove['Snare'][i] = humanize(snareBase - 6, mI, false);
                     }
-                    // Kick: grows in steps
-                    if      (loudness < 0.10) { if (mI === 0) isKick = true; }
-                    else if (loudness < 0.22) { if (mI === 0 || mI === 8) isKick = true; }
-                    else if (loudness < 0.35) { if (mI % 4 === 0) isKick = true; }
-                    else                       { if (mI % 2 === 0) isKick = true; }
-
-                    // Velocity grows with pos
-                    groove['Kick'][i]  = isKick ? Math.floor(40 + pos * 87) : 0;
-                    const snareV = isSnare === 'ghost'
-                        ? Math.floor(15 + pos * 55)
-                        : Math.floor(50 + pos * 77);
-                    groove['Snare'][i] = snareV;
-                    groove['Cymbal'][i] = cV;
+                    groove['Cymbal'][i] = cymbalVelocity(zone, mI, i, cymBase, false);
                     continue;
-                } else {
-                    if (mI % 2 !== 0) isSnare = true;
-                    if (mI % 2 === 0) isKick = true;
                 }
-            }
 
-            if (isDoom) {
-                // Doom cymbal: loudness vezérli a dinamikát
-                if (loudness < 0.25) {
-                    // Alul: csak negyedek
-                    if (mI % 4 === 0) cV = cymbalVel;
-                } else if (loudness < 0.45) {
-                    // Nyolcadok
-                    if (mI % 4 === 0) cV = cymbalVel;
-                    else if (mI % 2 === 0) cV = cymbalVel * 0.55;
-                } else if (loudness < 0.65) {
-                    // Tizenhatódok - minden step
-                    if (mI % 4 === 0) cV = cymbalVel;
-                    else if (mI % 2 === 0) cV = cymbalVel * 0.55;
-                    else cV = cymbalVel * 0.28;
-                } else if (loudness < 0.85) {
-                    // Ghost note-os tizenhatódok
-                    if (mI % 4 === 0) cV = cymbalVel;
-                    else if (mI % 2 === 0) cV = cymbalVel * 0.6;
-                    else if (seededRandom() < 0.55) cV = cymbalVel * 0.3;
-                } else {
-                    // Teteje: csak negyedek, nyers
-                    if (mI % 4 === 0) cV = cymbalVel;
+                // ---- KICK ----
+                if (kicks.includes(mI)) {
+                    // suppress kicks under a busy fill so the fill reads clearly
+                    if (!(isFillBar && fillSteps.includes(mI) && mI >= 8)) {
+                        const onBeat = (mI % 4 === 0);
+                        // Rhythmic contour: beats punch, in-between doubles sit back.
+                        // This is what makes double-bass sound PHRASED, not a flat drone.
+                        const kv = onBeat ? kickBase : Math.round(kickBase * 0.78);
+                        groove['Kick'][i] = humanize(kv, mI, mI === 0);
+                    }
                 }
-            } else if (isBlast) {
-                // Blast: mindig tizenhatód grid
-                if (mI % 4 === 0) {
-                    cV = cymbalVel;
-                } else if (mI % 2 === 0) {
-                    cV = cymbalVel * 0.55;
-                } else {
-                    cV = cymbalVel * 0.28;
-                }
-            } else {
-                // Rock + Punk: mindig tizenhatód grid, negyed erős, nyolcad közepes, 16od halk
-                if (mI % 4 === 0) {
-                    cV = cymbalVel;
-                } else if (mI % 2 === 0) {
-                    cV = cymbalVel * 0.55;
-                } else {
-                    cV = cymbalVel * 0.28;
-                }
-            }
 
-            groove['Kick'][i] = isKick ? drumVel : 0;
-            groove['Snare'][i] = isSnare === 'ghost' ? Math.floor(drumVel * 0.3) : (isSnare ? drumVel : 0);
-            groove['Cymbal'][i] = cV;
+                // ---- SNARE (backbeat + ghosts, or tom-led fill) ----
+                if (isFillBar && fillSteps.includes(mI)) {
+                    // tom-led fill: crescendo toward the downbeat, kick reinforces
+                    // the front of the fill (mimics floor-tom + kick) then snare on top
+                    const prog = (mI - fillSteps[0]) / Math.max(1, (15 - fillSteps[0]));
+                    groove['Snare'][i] = humanize(Math.round(72 + prog * 45), mI, true);
+                    // reinforce with kick on the first half of the fill for weight
+                    if (mI < 14 && (mI % 2 === 0)) {
+                        groove['Kick'][i] = humanize(kickBase - 4, mI, false);
+                    }
+                } else if (snares.includes(mI)) {
+                    groove['Snare'][i] = humanize(snareBase, mI, true);
+                } else if (ghosts.includes(mI) && chance(ghostProb)) {
+                    groove['Snare'][i] = Math.max(1, Math.min(60, humanize(ghostBase, mI, false)));
+                }
+
+                // ---- CYMBAL ----
+                groove['Cymbal'][i] = cymbalVelocity(zone, mI, i, cymBase, isFillBar);
+            }
         }
+
+        // Crash on the very first downbeat when it's loud (the "1" accent)
+        if (loudness >= 0.55 && totalSteps > 0) {
+            groove['Cymbal'][0] = Math.min(127, cymBase + 30);
+        }
+        // Crash resolves each fill: land a crash on the downbeat AFTER a fill bar
+        for (let bar = 1; bar < bars; bar++) {
+            const isFillBar = (bars > 1) && (bar % 2 === 1) && (bar * 16 + 8 < totalSteps);
+            if (isFillBar) {
+                const resolve = (bar + 1) * 16; // downbeat of the next bar
+                if (resolve < totalSteps) {
+                    groove['Cymbal'][resolve] = Math.min(127, cymBase + 30);
+                    if (groove['Kick'][resolve] === 0) groove['Kick'][resolve] = humanize(kickBase, 0, true);
+                }
+            }
+        }
+
         updateSequencerVisuals();
         updatePuckAndLabels();
+    }
+
+    // Cymbal density/dynamics: hat pulse at low loudness, ride/crash as it climbs.
+    function cymbalVelocity(zone, mI, i, base, isFillBar) {
+        // During a fill, thin out the cymbal so the fill cuts through
+        if (isFillBar && (mI % 4 !== 0)) return 0;
+
+        const sub = mI % 4;
+        if (zone === 'doom') {
+            if (loudness < 0.30) return sub === 0 ? base : 0;          // quarters
+            if (loudness < 0.60) return (mI % 2 === 0) ? (sub === 0 ? base : Math.round(base * 0.6)) : 0; // 8ths
+            // 16ths with accents
+            if (sub === 0) return base;
+            if (sub === 2) return Math.round(base * 0.6);
+            return chance(0.5) ? Math.round(base * 0.35) : 0;
+        }
+        if (zone === 'blast') {
+            // ride/crash steady 8ths so it cuts over the kick-snare barrage,
+            // hard bell accent on every beat
+            if (sub === 0) return Math.min(127, base + 10);
+            if (mI % 2 === 0) return Math.round(base * 0.7);
+            return 0;
+        }
+        // rock / punk
+        if (loudness < 0.40) {
+            // 8th-note hat pulse
+            return (mI % 2 === 0) ? (sub === 0 ? base : Math.round(base * 0.7)) : 0;
+        }
+        if (loudness < 0.72) {
+            // ride 8ths with bell accent on the beat (classic metal ride)
+            if (sub === 0) return Math.min(127, base + 8);
+            if (mI % 2 === 0) return Math.round(base * 0.6);
+            return 0;
+        }
+        // high loudness: keep riding 8ths so it doesn't mud up the 16th double-bass
+        if (sub === 0) return Math.min(127, base + 10);
+        if (mI % 2 === 0) return Math.round(base * 0.65);
+        return 0;
     }
 
     const seqDiv = document.getElementById('sequencer');
@@ -886,7 +1015,18 @@
         while (nextNoteTime < audioCtx.currentTime + scheduleAheadTime) {
             let s = currentStep;
             setTimeout(() => { if (isPlaying) highlightStep(s); }, (nextNoteTime - audioCtx.currentTime) * 1000);
-            instruments.forEach(inst => { if (groove[inst][currentStep] > 0) playSound(inst, groove[inst][currentStep], nextNoteTime, currentStep % 16); });
+            instruments.forEach(inst => {
+                if (groove[inst][currentStep] > 0) {
+                    const v = groove[inst][currentStep];
+                    // Micro-timing: tiny per-hit offset so it breathes (not quantized-stiff).
+                    // Snare backbeat sits a hair behind; ghosts loosest; kick tightest.
+                    const secPerStep = 0.25 * (60.0 / bpm);
+                    let jitter = (Math.random() - 0.5) * 0.012; // ±6ms human drift
+                    if (inst === 'Snare') jitter += (v < drumVelThresholdGhost) ? 0.008 : 0.004;
+                    const playAt = Math.max(audioCtx.currentTime, nextNoteTime + jitter);
+                    playSound(inst, v, playAt, currentStep % 16);
+                }
+            });
             const secondsPerBeat = 60.0 / bpm;
             nextNoteTime += 0.25 * secondsPerBeat;
             currentStep = (currentStep + 1) % totalSteps;
