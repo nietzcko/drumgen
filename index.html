@@ -396,10 +396,10 @@
 </div>
 
 <div class="xy-wrapper">
-    <span class="label top" id="labelTop">Hate</span>
-    <span class="label bottom" id="labelBottom">Void</span>
-    <span class="label left" id="labelLeft">Doom</span>
-    <span class="label right" id="labelRight">Blast</span>
+    <span class="label top" id="labelTop">Loud</span>
+    <span class="label bottom" id="labelBottom">Sparse</span>
+    <span class="label left" id="labelLeft">Slow</span>
+    <span class="label right" id="labelRight">Fast</span>
     <div class="xy-pad" id="xyPad">
         <div class="puck" id="puck"></div>
     </div>
@@ -554,23 +554,29 @@
         labelRight.style.color  = labelColor(distRight);
     }
 
+    // Cymbal SOUND selection along the continuous intensity axis (gx = X, 0..1)
+    // and energy (loudness = Y). Low intensity + low energy = jazzy ride/closed hat;
+    // rising energy opens the hat; high intensity/energy brings crash & china.
     function getCymbalType(mI) {
-        // Metal cymbal voicing by loudness:
-        //  low      : tight closed hat (gallop riding)
-        //  mid      : RIDE with BELL accents on the beat (the metal staple)
-        //  high     : crash/china on downbeats, ride bell between — not wall-to-wall
-        if (loudness < 0.42) {
-            return 'ClosedHH';
-        } else if (loudness < 0.66) {
-            // ride: bell (accent) on quarters, bow elsewhere -> use OpenHH as "ride bell"
-            return (mI % 4 === 0) ? 'OpenHH' : 'ClosedHH';
-        } else if (loudness < 0.85) {
-            if (mI % 4 === 0) return 'Crash';   // crash/china on each beat
-            return 'OpenHH';                     // ride between
-        } else {
-            // top end: crash on the beat, ride bell on the offbeats (controlled wall)
-            return (mI % 2 === 0) ? 'Crash' : 'OpenHH';
+        const gx = complexity;        // intensity/speed axis
+        const e  = loudness;          // energy axis
+        const onBeat = (mI % 4 === 0);
+        // Crashes appear as energy AND intensity climb; reserved for accents.
+        if (e > 0.80 && gx > 0.55) {
+            return onBeat ? 'Crash' : 'OpenHH';
         }
+        if (e > 0.62) {
+            // driving: crash the downbeat of the bar feel, ride/open between
+            if (onBeat && gx > 0.4) return (mI === 0) ? 'Crash' : 'OpenHH';
+            return (mI % 2 === 0) ? 'OpenHH' : 'ClosedHH';
+        }
+        if (e > 0.40) {
+            // mid energy: open accents on the beat, closed between (ride feel)
+            return onBeat ? 'OpenHH' : 'ClosedHH';
+        }
+        // low energy: intimate. Jazz end uses ride-like open touches, else closed.
+        if (gx < 0.35) return onBeat ? 'OpenHH' : 'ClosedHH';
+        return 'ClosedHH';
     }
 
     function playSoundSynth(inst, velocity, time, mI) {
@@ -679,255 +685,172 @@
     function seededRandom() { return rng(); }
 
     /*
-       GROOVE ENGINE v7
-       ----------------
-       Patterns are stored as ONE-BAR (16th) skeletons per zone, expressed as
-       musical events rather than blind per-step toggles. A skeleton defines:
-         k: kick step indices, s: backbeat snare step indices,
-         g: candidate ghost-snare steps, feel: 'straight'|'swing'
-       generateGroove() lays the skeleton across the whole sequence bar-by-bar,
-       humanizes velocity + adds an accent structure, sprinkles ghosts by
-       probability, and replaces the final bar of a 2-bar phrase with a fill.
-       Cymbal lane carries hi-hat / ride / crash density driven by loudness.
+       GROOVE ENGINE v8 — CONTINUOUS INTENSITY MODEL
+       ----------------------------------------------
+       No zones, no steps. Two continuous axes drive a set of "knobs", and each
+       instrument lane is generated probabilistically per 16th-note from those
+       knobs. Everything interpolates smoothly across the pad.
+
+         X (complexity) = INTENSITY / SPEED-FEEL  (0 = slow jazz+doom blend,
+                          1 = fast & heavy / blast)
+         Y (loudness)   = ENERGY (0 = sparse & quiet, 1 = dense & loud)
+
+       The same X-position always travels the SAME musical road:
+         left  : spacious, ride-led, swinging-but-straight, snare cross-stick
+                 feel, sparse kick, lots of gaps  (jazz/doom)
+         mid   : backbeat rock/groove, syncopated kick
+         right : double-bass subdivisions, blast-leaning, dense & aggressive
+       Y layered on top decides how FULL and LOUD that road gets.
     */
 
-    // Pick a value from an array using the seeded rng
-    function pick(arr) { return arr[Math.floor(rng() * arr.length)]; }
+    // smoothstep for nice non-linear ramps
+    function ss(a, b, x) {
+        const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+        return t * t * (3 - 2 * t);
+    }
+    function lerp(a, b, t) { return a + (b - a) * t; }
 
-    // ---- DOUBLE-BASS FIGURE LIBRARY ----
-    // Real metal double-bass is phrased, not a flat 16th drone. Each figure is a
-    // one-bar set of kick step indices that LOCKS with the backbeat (it leaves
-    // room around beats 2 & 4, or deliberately plays through them for intensity).
-    // Figures are grouped by intensity tier; we pick within a tier with the RNG
-    // so adjacent pad cells give variation instead of the same drone.
-    const DBASS_FIGURES = {
-        // tier 1: gallops & half-feel — feet phrase in 3s/2s, backbeat stays clear
-        light: [
-            [0, 3, 4, 7, 8, 11, 12, 15],        // straight gallop: beat + "a"
-            [0, 1, 4, 5, 8, 9, 12, 13],         // reverse gallop: beat + "e"
-            [0, 2, 3, 8, 10, 11],               // burst-rest-burst (two-bar feel)
-            [0, 3, 6, 8, 11, 14],               // dotted / swung doubles
-        ],
-        // tier 2: driving 16ths with gaps that breathe around the snare
-        mid: [
-            [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14],  // 3-note bursts off each beat
-            [0, 2, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15],  // skip-step stutter
-            [0, 1, 2, 8, 9, 10, 4, 6, 12, 14],          // bursts on 1&3, doubles on 2&4
-            [0, 3, 4, 5, 7, 8, 11, 12, 13, 15],         // syncopated gallop chain
-        ],
-        // tier 3: relentless but still phrased — accented groupings, not pure drone
-        heavy: [
-            [0,1,2,3, 6,7, 8,9,10,11, 14,15],     // 4-group / 2-group alternation
-            [0,1,2, 4,5,6, 8,9,10, 12,13,14],      // groups of 3 (triplet-feel over 16ths)
-            [0,1,2,3,4,5,6,7, 10,11, 14,15],       // run then stutter
-            [0,1,3,4, 6,7,8,9, 11,12, 14,15],      // displaced groupings
-        ],
-    };
-
-    // Build the kick skeleton for a zone, scaled by intra-zone position (0..1).
-    // METAL: loudness (Y) drives a RHYTHMIC double-bass figure on top of the
-    // zone's base groove — not a flat 16th wall.
-    function kickPattern(zone, pos, bar) {
-        let k;
-        if (zone === 'doom') {
-            // Sparse, heavy base. Beat 1 always; fill in as pos grows.
-            k = [0];
-            if (pos >= 0.30) k.push(8);
-            if (pos >= 0.55) k.push(10);
-            if (pos >= 0.80) k.push(14);
-        } else if (zone === 'rock') {
-            // Mid-tempo metal: syncopated kick under the backbeat.
-            const sets = [
-                [0, 8],
-                [0, 6, 8],
-                [0, 3, 8, 10],
-                [0, 6, 8, 11, 14],
-            ];
-            k = sets[Math.min(sets.length - 1, Math.floor(pos * sets.length))].slice();
-        } else if (zone === 'punk') {
-            // D-beat / thrash drive: steady 8ths, denser to the right.
-            const sets = [
-                [0, 4, 8, 12],
-                [0, 3, 4, 8, 11, 12],
-                [0, 2, 4, 8, 10, 12],
-                [0, 2, 4, 6, 8, 10, 12, 14],
-            ];
-            k = sets[Math.min(sets.length - 1, Math.floor(pos * sets.length))].slice();
-        } else {
-            // blast base
-            k = [0, 4, 8, 12];
-        }
-
-        // ---- RHYTHMIC DOUBLE-BASS LAYER ----
-        // Choose a figure tier from loudness, then pick a specific figure with the
-        // RNG. Re-pick per bar (offset the rng by bar) so two-bar phrases breathe.
-        let tier = null;
-        if      (loudness >= 0.55 && loudness < 0.72) tier = 'light';
-        else if (loudness >= 0.72 && loudness < 0.86) tier = 'mid';
-        else if (loudness >= 0.86)                    tier = 'heavy';
-
-        if (tier) {
-            const figs = DBASS_FIGURES[tier];
-            // bar-dependent pick: vary the figure across the phrase but stay coherent
-            const fig = figs[Math.floor(rng() * figs.length)];
-            // doom keeps it more reserved — only merge a sparser slice of the figure
-            if (zone === 'doom') {
-                fig.forEach(s => { if (s % 2 === 0 || rng() < 0.4) k.push(s); });
-            } else {
-                fig.forEach(s => k.push(s));
-            }
-        }
-        return [...new Set(k)].sort((a, b) => a - b);
+    // Derive all generative knobs from the two axes. Pure function of (gx, e).
+    function deriveKnobs(gx, e) {
+        return {
+            gx, e,
+            // how finely the kick subdivides: 0≈quarter/half feel → 1≈16th double-bass
+            kickDensity:   lerp(0.05, 1.0, ss(0.15, 1.0, gx)) * lerp(0.5, 1.0, e),
+            // probability the kick plays straight 8ths vs syncopated placement
+            kickDrive:     ss(0.45, 1.0, gx),
+            // backbeat strength (snare on 2&4). Strong in the middle, looser at jazz end,
+            // dissolves into blast at the far right.
+            backbeat:      ss(0.20, 0.45, gx) * (1 - ss(0.85, 1.0, gx) * 0.5),
+            // blast tendency (kick/snare alternation) ramps in only at the top-right
+            blast:         ss(0.80, 1.0, gx) * ss(0.45, 0.85, e),
+            // snare ghost / comp note density — high at jazz end (comping) & high energy
+            ghost:         lerp(0.15, 0.5, ss(0.0, 0.4, 1 - gx)) * lerp(0.4, 1.3, e),
+            // ride / hat density (how many cymbal subdivisions)
+            rideDensity:   lerp(0.35, 1.0, Math.max(ss(0.0, 0.5, e), ss(0.5, 1.0, gx))),
+            // swing-ish placement bias is OFF (always straight) — kept for clarity
+            // overall syncopation / looseness, strongest at the jazz end
+            synco:         lerp(0.55, 0.1, ss(0.0, 0.6, gx)),
+            // velocity floor/ceiling from energy
+            velLo:         lerp(38, 80, e),
+            velHi:         lerp(78, 120, e),
+            // accent depth (difference between accented & unaccented hits)
+            accent:        lerp(0.55, 0.85, 1 - e * 0.3),
+        };
     }
 
-    // Snare backbeat per zone
-    function snarePattern(zone) {
-        if (zone === 'doom') return [8];            // half-time, beat 3
-        if (zone === 'rock') return [4, 12];        // 2 and 4
-        if (zone === 'punk') return [4, 12];        // 2 and 4 (d-beat backbeat)
-        // blast: snare alternates with kick on the offbeat 16ths (handled specially)
-        return [2, 6, 10, 14];
-    }
-
-    // Candidate ghost-note steps (will be gated by probability)
-    function ghostCandidates(zone) {
-        if (zone === 'doom') return [11, 14];
-        if (zone === 'rock') return [3, 7, 10, 11, 15];
-        if (zone === 'punk') return [2, 6, 10, 14];
-        return [2, 6, 10, 14];
-    }
-
-    // A small library of one-bar fills (snare/tom-style bursts) for phrase ends.
-    // Represented on the snare lane as accented 16ths leading to the downbeat.
-    function pickFill(zone, intensity) {
-        const fills = [
-            [12, 13, 14, 15],
-            [10, 11, 12, 13, 14, 15],
-            [8, 10, 12, 13, 14, 15],
-            [12, 14, 15],
-            [11, 13, 14, 15],
-        ];
-        // heavier zones / louder => busier fill
-        const bias = Math.min(fills.length - 1, Math.floor(intensity * fills.length));
-        // still allow some variety around the bias
-        const lo = Math.max(0, bias - 1);
-        const choice = lo + Math.floor(rng() * (fills.length - lo));
-        return fills[Math.min(fills.length - 1, choice)];
-    }
-
-    // Humanize a base velocity: accent on downbeats, slight random drift.
-    function humanize(base, stepInBar, isAccent) {
-        let v = base;
-        if (isAccent) v += 8;
-        // beat-position accenting: beats (0,4,8,12) loudest, offbeats softer
-        const sub = stepInBar % 4;
-        if (sub === 0) v += 6;
-        else if (sub === 2) v += 2;
-        else v -= 4;
-        // random drift ±6 for human feel
-        v += Math.floor((rng() - 0.5) * 12);
-        return Math.max(1, Math.min(127, Math.round(v)));
+    // weighted velocity helper given knobs, an accent flag, and the 16th position
+    function vel(k, accentStrength, mI) {
+        const sub = mI % 4;
+        let base = lerp(k.velLo, k.velHi, accentStrength);
+        // metric accent: beats > offbeats > in-between
+        if (sub === 0) base *= 1.0;
+        else if (sub === 2) base *= 0.86;
+        else base *= 0.72;
+        // human drift
+        base += (rng() - 0.5) * 10;
+        return Math.max(1, Math.min(127, Math.round(base)));
     }
 
     function generateGroove() {
         for (let inst in groove) groove[inst] = new Array(totalSteps).fill(0);
 
-        // Deterministic per XY cell, but fine-grained enough to vary across the pad
-        let zoneX = Math.floor(complexity * 40);
-        let zoneY = Math.floor(loudness * 40);
-        seedRng(zoneX * 131 + zoneY * 977 + 17);
+        const gx = complexity, e = loudness;
+        // Deterministic-ish per pad cell but fine-grained so it varies smoothly,
+        // and re-rolls each generate for organic variation.
+        seedRng((Math.floor(gx * 200) * 73856093) ^ (Math.floor(e * 200) * 19349663) ^ (Date.now() & 0xffff));
 
-        // Zone boundaries (kept conceptually; tuned for musicality)
-        let zone, pos;
-        if (complexity < 0.18) { zone = 'doom';  pos = complexity / 0.18; }
-        else if (complexity < 0.52) { zone = 'rock';  pos = (complexity - 0.18) / 0.34; }
-        else if (complexity < 0.88) { zone = 'punk';  pos = (complexity - 0.52) / 0.36; }
-        else { zone = 'blast'; pos = (complexity - 0.88) / 0.12; }
-
-        // Base velocities driven by loudness (Y axis)
-        const kickBase  = Math.round(70 + loudness * 50);
-        const snareBase = Math.round(72 + loudness * 50);
-        const ghostBase = Math.round(22 + loudness * 18);
-        const cymBase   = Math.round(60 + loudness * 45);
-
-        const snares = snarePattern(zone);
-        const ghosts = ghostCandidates(zone);
-        // ghost density rises with loudness and intra-zone position
-        const ghostProb = 0.12 + loudness * 0.30 + pos * 0.18;
-
+        const k = deriveKnobs(gx, e);
         const bars = Math.ceil(totalSteps / 16);
-        // A true blast beat at high intensity: kick and snare alternate on 16ths.
-        const isTrueBlast = (zone === 'blast') && (loudness >= 0.5);
 
         for (let bar = 0; bar < bars; bar++) {
             const barStart = bar * 16;
-            // Last bar of every 2-bar phrase becomes a fill (only if there's room)
             const isFillBar = (bars > 1) && (bar % 2 === 1) && (barStart + 8 < totalSteps);
-            const fillSteps = isFillBar ? pickFill(zone, (pos + loudness) / 2) : null;
-            // Fresh double-bass figure each bar so the phrase breathes & varies
-            const kicks = kickPattern(zone, pos, bar);
 
+            // ---- choose this bar's kick subdivision grid from kickDensity ----
+            // We build a probability per 16th step that scales with density and drive.
             for (let mI = 0; mI < 16; mI++) {
                 const i = barStart + mI;
                 if (i >= totalSteps) break;
+                const sub = mI % 4;
+                const onBeat = sub === 0;
 
-                // ===== TRUE BLAST BEAT: alternating kick(even)/snare(odd) 16ths =====
-                if (isTrueBlast && !isFillBar) {
-                    if (mI % 2 === 0) {
-                        groove['Kick'][i] = humanize(kickBase, mI, mI === 0);
-                    } else {
-                        groove['Snare'][i] = humanize(snareBase - 6, mI, false);
+                // ============ FILL (last bar of phrase) ============
+                if (isFillBar && mI >= 12 - Math.round(k.gx * 4)) {
+                    // tom/snare-led fill that intensifies toward the end; busier at high X
+                    const prog = (mI - (12 - Math.round(k.gx * 4))) / 4;
+                    if (rng() < 0.6 + k.gx * 0.4) {
+                        groove['Snare'][i] = vel(k, 0.7 + prog * 0.3, mI);
+                        if (k.gx > 0.5 && mI % 2 === 0) groove['Kick'][i] = vel(k, 0.7, mI);
                     }
-                    groove['Cymbal'][i] = cymbalVelocity(zone, mI, i, cymBase, false);
+                    groove['Cymbal'][i] = (mI === 12) ? vel(k, 1.0, mI) : 0;
                     continue;
                 }
 
-                // ---- KICK ----
-                if (kicks.includes(mI)) {
-                    // suppress kicks under a busy fill so the fill reads clearly
-                    if (!(isFillBar && fillSteps.includes(mI) && mI >= 8)) {
-                        const onBeat = (mI % 4 === 0);
-                        // Rhythmic contour: beats punch, in-between doubles sit back.
-                        // This is what makes double-bass sound PHRASED, not a flat drone.
-                        const kv = onBeat ? kickBase : Math.round(kickBase * 0.78);
-                        groove['Kick'][i] = humanize(kv, mI, mI === 0);
-                    }
+                // ============ BLAST behaviour (far right + energy) ============
+                if (k.blast > 0.4 && rng() < k.blast) {
+                    if (mI % 2 === 0) groove['Kick'][i]  = vel(k, 0.9, mI);
+                    else              groove['Snare'][i] = vel(k, 0.55, mI);
+                    groove['Cymbal'][i] = (mI % 2 === 0) ? vel(k, onBeat ? 1.0 : 0.7, mI) : 0;
+                    continue;
                 }
 
-                // ---- SNARE (backbeat + ghosts, or tom-led fill) ----
-                if (isFillBar && fillSteps.includes(mI)) {
-                    // tom-led fill: crescendo toward the downbeat, kick reinforces
-                    // the front of the fill (mimics floor-tom + kick) then snare on top
-                    const prog = (mI - fillSteps[0]) / Math.max(1, (15 - fillSteps[0]));
-                    groove['Snare'][i] = humanize(Math.round(72 + prog * 45), mI, true);
-                    // reinforce with kick on the first half of the fill for weight
-                    if (mI < 14 && (mI % 2 === 0)) {
-                        groove['Kick'][i] = humanize(kickBase - 4, mI, false);
-                    }
-                } else if (snares.includes(mI)) {
-                    groove['Snare'][i] = humanize(snareBase, mI, true);
-                } else if (ghosts.includes(mI) && chance(ghostProb)) {
-                    groove['Snare'][i] = Math.max(1, Math.min(60, humanize(ghostBase, mI, false)));
+                // ============ KICK ============
+                // Beat 1 almost always anchors. Other positions weighted by density,
+                // with on-beats and the "&" favoured, syncopation adds offbeats.
+                let kp;
+                if (mI === 0) {
+                    kp = 0.96;
+                } else if (onBeat) {
+                    kp = 0.35 + k.kickDrive * 0.5 + k.kickDensity * 0.2;
+                } else if (sub === 2) { // the "&"
+                    kp = 0.18 + k.kickDrive * 0.45 + k.kickDensity * 0.3;
+                } else { // 16th subdivisions (gallops / double-bass)
+                    kp = (k.kickDensity - 0.45) * 1.3 + k.synco * 0.18;
+                }
+                // double-bass phrasing: when dense, bias toward grouped 16ths not random
+                if (k.kickDensity > 0.6 && !onBeat && sub !== 2) {
+                    // favour the 16th right after a beat (gallop) and runs
+                    const afterBeat = (mI % 4 === 1);
+                    kp += afterBeat ? 0.25 : 0.12;
+                }
+                let kickHere = rng() < kp;
+
+                // ============ SNARE (backbeat + ghosts/comping) ============
+                let snareHere = false, snareAcc = 0.85;
+                const isBackbeatPos = (mI === 4 || mI === 12);
+                if (isBackbeatPos && rng() < 0.45 + k.backbeat * 0.6) {
+                    snareHere = true; snareAcc = 0.9;
+                } else if (!onBeat && rng() < k.ghost * (sub === 2 ? 0.5 : 0.7)) {
+                    // ghost / comp note (jazzy left end gets the most of these)
+                    snareHere = true; snareAcc = 0.18 + rng() * 0.15;
                 }
 
-                // ---- CYMBAL ----
-                groove['Cymbal'][i] = cymbalVelocity(zone, mI, i, cymBase, isFillBar);
+                // avoid kick+snare stacking on weak ghost notes (keeps it clean)
+                if (kickHere && snareHere && snareAcc < 0.4 && rng() < 0.6) snareHere = false;
+
+                if (kickHere) groove['Kick'][i]  = vel(k, onBeat ? 0.95 : 0.78, mI);
+                if (snareHere) {
+                    let sv = vel(k, snareAcc, mI);
+                    if (snareAcc < 0.4) sv = Math.min(sv, drumVelThresholdGhost - 3); // force ghost sample
+                    groove['Snare'][i] = sv;
+                }
+
+                // ============ CYMBAL (ride / hat) ============
+                groove['Cymbal'][i] = cymbalLane(k, mI);
             }
         }
 
-        // Crash on the very first downbeat when it's loud (the "1" accent)
-        if (loudness >= 0.55 && totalSteps > 0) {
-            groove['Cymbal'][0] = Math.min(127, cymBase + 30);
+        // Crash on the very first hit when there's real energy/intensity (the "1")
+        if (e > 0.45 && totalSteps > 0) {
+            groove['Cymbal'][0] = Math.min(127, vel(k, 1.0, 0) + 15);
         }
-        // Crash resolves each fill: land a crash on the downbeat AFTER a fill bar
+        // Crash resolves each phrase fill on the following downbeat
         for (let bar = 1; bar < bars; bar++) {
             const isFillBar = (bars > 1) && (bar % 2 === 1) && (bar * 16 + 8 < totalSteps);
-            if (isFillBar) {
-                const resolve = (bar + 1) * 16; // downbeat of the next bar
-                if (resolve < totalSteps) {
-                    groove['Cymbal'][resolve] = Math.min(127, cymBase + 30);
-                    if (groove['Kick'][resolve] === 0) groove['Kick'][resolve] = humanize(kickBase, 0, true);
-                }
+            const resolve = (bar + 1) * 16;
+            if (isFillBar && resolve < totalSteps) {
+                groove['Cymbal'][resolve] = Math.min(127, vel(k, 1.0, 0) + 15);
+                if (groove['Kick'][resolve] === 0) groove['Kick'][resolve] = vel(k, 0.95, 0);
             }
         }
 
@@ -935,41 +858,25 @@
         updatePuckAndLabels();
     }
 
-    // Cymbal density/dynamics: hat pulse at low loudness, ride/crash as it climbs.
-    function cymbalVelocity(zone, mI, i, base, isFillBar) {
-        // During a fill, thin out the cymbal so the fill cuts through
-        if (isFillBar && (mI % 4 !== 0)) return 0;
-
+    // Cymbal lane density/dynamics as a continuous function of the knobs.
+    function cymbalLane(k, mI) {
         const sub = mI % 4;
-        if (zone === 'doom') {
-            if (loudness < 0.30) return sub === 0 ? base : 0;          // quarters
-            if (loudness < 0.60) return (mI % 2 === 0) ? (sub === 0 ? base : Math.round(base * 0.6)) : 0; // 8ths
-            // 16ths with accents
-            if (sub === 0) return base;
-            if (sub === 2) return Math.round(base * 0.6);
-            return chance(0.5) ? Math.round(base * 0.35) : 0;
+        const onBeat = sub === 0;
+        const d = k.rideDensity;
+        // quarter pulse always present at the beat when there's any ride density
+        if (onBeat) {
+            if (d < 0.2 && mI !== 0 && mI !== 8) return 0; // very sparse: only 1 & 3
+            return vel(k, 0.85, mI);
         }
-        if (zone === 'blast') {
-            // ride/crash steady 8ths so it cuts over the kick-snare barrage,
-            // hard bell accent on every beat
-            if (sub === 0) return Math.min(127, base + 10);
-            if (mI % 2 === 0) return Math.round(base * 0.7);
+        // 8th-note ride layer
+        if (sub === 2) {
+            if (d > 0.35) return vel(k, 0.55, mI);
             return 0;
         }
-        // rock / punk
-        if (loudness < 0.40) {
-            // 8th-note hat pulse
-            return (mI % 2 === 0) ? (sub === 0 ? base : Math.round(base * 0.7)) : 0;
-        }
-        if (loudness < 0.72) {
-            // ride 8ths with bell accent on the beat (classic metal ride)
-            if (sub === 0) return Math.min(127, base + 8);
-            if (mI % 2 === 0) return Math.round(base * 0.6);
-            return 0;
-        }
-        // high loudness: keep riding 8ths so it doesn't mud up the 16th double-bass
-        if (sub === 0) return Math.min(127, base + 10);
-        if (mI % 2 === 0) return Math.round(base * 0.65);
+        // 16th ride layer (busy ride / driving feel)
+        if (d > 0.7) return vel(k, 0.32, mI);
+        // sparse syncopated ride touches at the jazzy end
+        if (k.gx < 0.35 && k.synco > 0.3 && rng() < k.synco * 0.25) return vel(k, 0.4, mI);
         return 0;
     }
 
