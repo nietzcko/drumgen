@@ -718,11 +718,18 @@
             kickDensity:   lerp(0.05, 1.0, ss(0.15, 1.0, gx)) * lerp(0.5, 1.0, e),
             // probability the kick plays straight 8ths vs syncopated placement
             kickDrive:     ss(0.45, 1.0, gx),
-            // backbeat strength (snare on 2&4). Strong in the middle, looser at jazz end,
-            // dissolves into blast at the far right.
-            backbeat:      ss(0.20, 0.45, gx) * (1 - ss(0.85, 1.0, gx) * 0.5),
-            // blast tendency (kick/snare alternation) ramps in only at the top-right
-            blast:         ss(0.80, 1.0, gx) * ss(0.45, 0.85, e),
+            // 2&4 backbeat strength. Stays near zero through the LEFT HALF so the
+            // left side plays a single main snare (half-time, beat 3) instead of the
+            // 5-and-13 backbeat feel. Fades in through the middle and stays strong
+            // to the right.
+            backbeat:      ss(0.42, 0.70, gx),
+            // single "main" snare on beat 3 — dominant on the LEFT, hands over to the
+            // backbeat as we move right.
+            mainSnare:     1 - ss(0.35, 0.62, gx),
+            // EXTRA snare drive on the RIGHT: fills the snare from 2 hits (2&4) up to
+            // every beat (4-on-the-floor) by ~0.8, then toward the offbeat 8ths at the
+            // extreme — giving 4, then 6-8+ snare hits per bar as you go right/loud.
+            snareDrive:    ss(0.55, 0.82, gx) * lerp(0.75, 1.0, e),
             // snare ghost / comp note density — high at jazz end (comping) & high energy
             ghost:         lerp(0.15, 0.5, ss(0.0, 0.4, 1 - gx)) * lerp(0.4, 1.3, e),
             // ride / hat density (how many cymbal subdivisions)
@@ -755,9 +762,15 @@
         for (let inst in groove) groove[inst] = new Array(totalSteps).fill(0);
 
         const gx = complexity, e = loudness;
-        // Deterministic-ish per pad cell but fine-grained so it varies smoothly,
-        // and re-rolls each generate for organic variation.
-        seedRng((Math.floor(gx * 200) * 73856093) ^ (Math.floor(e * 200) * 19349663) ^ (Date.now() & 0xffff));
+        // STABILITY: the pattern skeleton only re-rolls when the puck crosses into a
+        // new coarse cell (~10 cells per axis). The KNOBS below still read the raw
+        // continuous gx/e, so the FEEL morphs smoothly between regenerations while
+        // the pattern itself stays put for small movements. No clock term => the
+        // same cell always reproduces the same groove (no churn while holding still).
+        const CELLS = 10;
+        const cellX = Math.round(gx * CELLS);
+        const cellY = Math.round(e * CELLS);
+        seedRng(((cellX * 73856093) ^ (cellY * 19349663)) >>> 0);
 
         const k = deriveKnobs(gx, e);
         const bars = Math.ceil(totalSteps / 16);
@@ -786,14 +799,6 @@
                     continue;
                 }
 
-                // ============ BLAST behaviour (far right + energy) ============
-                if (k.blast > 0.4 && rng() < k.blast) {
-                    if (mI % 2 === 0) groove['Kick'][i]  = vel(k, 0.9, mI);
-                    else              groove['Snare'][i] = vel(k, 0.55, mI);
-                    groove['Cymbal'][i] = (mI % 2 === 0) ? vel(k, onBeat ? 1.0 : 0.7, mI) : 0;
-                    continue;
-                }
-
                 // ============ KICK ============
                 // Beat 1 almost always anchors. Other positions weighted by density,
                 // with on-beats and the "&" favoured, syncopation adds offbeats.
@@ -815,13 +820,32 @@
                 }
                 let kickHere = rng() < kp;
 
-                // ============ SNARE (backbeat + ghosts/comping) ============
+                // ============ SNARE ============
+                // LEFT  : one main snare on beat 3 (mI 8) — slow half-time feel.
+                // MID   : resolves into the 2 & 4 backbeat (mI 4 & 12).
+                // RIGHT : snareDrive fills toward a hit on EVERY beat (0,4,8,12),
+                //         then the offbeat 8ths (2,6,10,14) at the extreme — 4..8 hits.
+                // Plus ghost/comp notes (densest at the jazzy left & at high energy).
                 let snareHere = false, snareAcc = 0.85;
-                const isBackbeatPos = (mI === 4 || mI === 12);
-                if (isBackbeatPos && rng() < 0.45 + k.backbeat * 0.6) {
-                    snareHere = true; snareAcc = 0.9;
+                const isBackbeatPos = (mI === 4 || mI === 12);   // 2 & 4
+                const isMainPos = (mI === 8);                    // beat 3
+                const isOtherBeat = (mI === 0 || mI === 8);      // 1 & 3
+                const isOffEighth = (mI === 2 || mI === 6 || mI === 10 || mI === 14);
+
+                if (isBackbeatPos && rng() < Math.max(k.backbeat, k.snareDrive) * 0.97) {
+                    // the 2 & 4 backbeat (always the strongest snare voice)
+                    snareHere = true; snareAcc = 0.92;
+                } else if (isMainPos && rng() < Math.max(k.mainSnare, k.snareDrive) * 0.95) {
+                    // beat-3 anchor on the left; also part of 4-on-the-floor on the right
+                    snareHere = true; snareAcc = 0.88;
+                } else if (mI === 0 && rng() < k.snareDrive * 0.9) {
+                    // beat 1 snare — completes the four-on-the-floor snare on the right
+                    snareHere = true; snareAcc = 0.85;
+                } else if (isOffEighth && rng() < ss(0.7, 1.0, gx) * 0.9) {
+                    // offbeat 8th snares at the far-right extreme (6..8 hits/bar)
+                    snareHere = true; snareAcc = 0.7;
                 } else if (!onBeat && rng() < k.ghost * (sub === 2 ? 0.5 : 0.7)) {
-                    // ghost / comp note (jazzy left end gets the most of these)
+                    // ghost / comp note
                     snareHere = true; snareAcc = 0.18 + rng() * 0.15;
                 }
 
@@ -969,13 +993,23 @@
 
     const xyPad = document.getElementById('xyPad');
     const puck = document.getElementById('puck');
+    let _lastCellX = -1, _lastCellY = -1;
     function updateXY(x, y) {
         const rect = xyPad.getBoundingClientRect();
         let px = Math.max(0, Math.min(x, rect.width));
         let py = Math.max(0, Math.min(y, rect.height));
         puck.style.left = `${px}px`; puck.style.top = `${py}px`;
         complexity = px / rect.width; loudness = 1.0 - (py / rect.height);
-        generateGroove();
+        // Always update puck color/labels (cheap, continuous feedback)...
+        updatePuckAndLabels();
+        // ...but only re-roll the groove when we enter a NEW coarse cell, so small
+        // movements don't churn the pattern. (CELLS must match generateGroove.)
+        const CELLS = 10;
+        const cx = Math.round(complexity * CELLS), cy = Math.round(loudness * CELLS);
+        if (cx !== _lastCellX || cy !== _lastCellY) {
+            _lastCellX = cx; _lastCellY = cy;
+            generateGroove();
+        }
     }
 
     xyPad.addEventListener('pointerdown', (e) => { if(!tiltEnabled) updateXY(e.offsetX, e.offsetY); });
