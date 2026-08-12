@@ -286,7 +286,9 @@
     <div class="grid" id="grid"></div>
 
     <div class="foot">
-        <div class="status">Preset <b id="curName">—</b><span class="cue" id="cueNote"></span></div>
+        <div class="status">Preset <b id="curName">—</b><span class="cue" id="cueNote"></span>
+            <a id="resetPresets" style="color:#666; cursor:pointer; text-decoration:underline; margin-left:10px;">reset presets</a>
+        </div>
         <div id="wavNote">samples: checking…</div>
     </div>
 
@@ -462,6 +464,20 @@
     // route target for all voices (falls back to destination before EQ is built)
     function out() { return masterBus || audioCtx.destination; }
 
+    // active scheduled sources (so Stop can cut sound that's already queued ahead)
+    let activeSources = [];
+    function trackSource(node) {
+        activeSources.push(node);
+        node.onended = () => {
+            const i = activeSources.indexOf(node);
+            if (i >= 0) activeSources.splice(i, 1);
+        };
+    }
+    function killAllSources() {
+        activeSources.forEach(n => { try { n.stop(); } catch (e) {} });
+        activeSources = [];
+    }
+
     function playWav(key, vol, time) {
         if (!wavBuffers[key]) return false;
         const src = audioCtx.createBufferSource();
@@ -470,6 +486,7 @@
         g.gain.setValueAtTime(Math.min(1, vol), time);
         src.connect(g); g.connect(out());
         src.start(time);
+        trackSource(src);
         return true;
     }
 
@@ -485,6 +502,7 @@
             o.frequency.exponentialRampToValueAtTime(0.001, time + 0.2);
             g.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
             o.connect(g); o.start(time); o.stop(time + 0.2);
+            trackSource(o);
         } else if (key === 'snare' || key === 'snare_ghost') {
             const o = audioCtx.createOscillator();
             o.type = 'triangle'; o.frequency.setValueAtTime(200, time);
@@ -498,6 +516,7 @@
             noise.connect(f); f.connect(g); o.connect(g);
             g.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
             o.start(time); noise.start(time); o.stop(time + 0.25);
+            trackSource(o); trackSource(noise);
         } else {
             // cymbals / hats
             const isCrash = key === 'crash';
@@ -513,6 +532,7 @@
             noise.connect(f); f.connect(g);
             g.gain.exponentialRampToValueAtTime(0.001, time + dur);
             noise.start(time);
+            trackSource(noise);
         }
     }
 
@@ -529,10 +549,40 @@
         ROWS.forEach(r => g[r.key] = new Array(STEPS).fill(0));
         return g;
     }
-    function loadPreset(idx) {
-        grid = emptyGrid();
+
+    // Per-preset WORKING grids. These hold your edits so switching presets and
+    // coming back keeps what you changed. Seeded from the factory PRESETS, then
+    // persisted to localStorage so they survive a reload.
+    const PGRID_KEY = 'sixteen_presetgrids_v1';
+    function presetToGrid(idx) {
+        const g = emptyGrid();
         const pat = PRESETS[idx].pattern;
-        for (const key in pat) if (grid[key]) grid[key] = pat[key].slice();
+        for (const key in pat) if (g[key]) g[key] = pat[key].slice();
+        return g;
+    }
+    let presetGrids = null;
+    function loadPresetGrids() {
+        let saved = null;
+        try { saved = JSON.parse(localStorage.getItem(PGRID_KEY)); } catch (e) {}
+        presetGrids = PRESETS.map((_, idx) => {
+            // validate a saved grid has all rows at length 16, else fall back to factory
+            const s = saved && saved[idx];
+            if (s && ROWS.every(r => Array.isArray(s[r.key]) && s[r.key].length === STEPS)) {
+                const g = emptyGrid();
+                ROWS.forEach(r => g[r.key] = s[r.key].slice());
+                return g;
+            }
+            return presetToGrid(idx);
+        });
+    }
+    function savePresetGrids() {
+        try { localStorage.setItem(PGRID_KEY, JSON.stringify(presetGrids)); } catch (e) {}
+    }
+
+    function loadPreset(idx) {
+        if (!presetGrids) loadPresetGrids();
+        // point the live grid at this preset's working copy (edits write through)
+        grid = presetGrids[idx];
         currentPreset = idx;
         cuedPreset = null;
         renderCells();
@@ -563,6 +613,10 @@
                 c.addEventListener('click', () => {
                     grid[r.key][i] = grid[r.key][i] ? 0 : 1;
                     c.classList.toggle('on', !!grid[r.key][i]);
+                    // if we're editing a preset (not a loaded setup / blank), persist it
+                    if (presetGrids && currentPreset >= 0 && grid === presetGrids[currentPreset]) {
+                        savePresetGrids();
+                    }
                 });
                 steps.appendChild(c);
                 cellEls[r.key].push(c);
@@ -656,13 +710,15 @@
     }
 
     function scheduler() {
+        if (!isPlaying) return;   // don't reschedule if we've stopped
         while (nextNoteTime < audioCtx.currentTime + scheduleAhead) {
             const stepToPlay = currentStep;
             const timeToPlay = nextNoteTime;
             scheduleStep(stepToPlay, timeToPlay);
-            // schedule the visual playhead in sync
+            // schedule the visual playhead in sync (guarded so a late timeout after
+            // stop doesn't re-light the grid)
             const delay = (timeToPlay - audioCtx.currentTime) * 1000;
-            setTimeout(() => draw(stepToPlay), Math.max(0, delay));
+            setTimeout(() => { if (isPlaying) draw(stepToPlay); }, Math.max(0, delay));
             advance();
         }
         timerID = setTimeout(scheduler, lookahead);
@@ -679,8 +735,10 @@
     }
 
     function stop() {
-        isPlaying = false;
+        isPlaying = false;              // must be set first so scheduler bails out
         clearTimeout(timerID);
+        timerID = null;
+        killAllSources();               // cut any audio already scheduled ahead
         const btn = document.getElementById('playBtn');
         btn.textContent = '▶'; btn.classList.remove('playing');
         ROWS.forEach(r => cellEls[r.key].forEach(c => c.classList.remove('play')));
@@ -940,10 +998,19 @@
 
     // init
     buildGrid();
+    loadPresetGrids();
     loadPreset(0);
     midiBindings = readBindings();
     renderSetups();
     renderLearn();
+
+    // reset all four presets back to their factory patterns
+    document.getElementById('resetPresets').addEventListener('click', () => {
+        if (!confirm('Reset all four presets to their original patterns? Your edits to them will be lost.')) return;
+        presetGrids = PRESETS.map((_, idx) => presetToGrid(idx));
+        savePresetGrids();
+        loadPreset(currentPreset >= 0 ? currentPreset : 0);
+    });
 </script>
 </body>
 </html>
