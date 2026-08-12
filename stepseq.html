@@ -151,13 +151,9 @@
         transition: background-color .1s, opacity .1s;
     }
     .step.on { background-color: var(--step-active); }
-    /* SHORT hit: half-filled look (only the beginning plays) */
-    .step.short {
-        background: linear-gradient(90deg, var(--step-active) 0 45%, #5a1f1d 45% 100%);
-    }
     .step.play { background-color: var(--step-current) !important; box-shadow: 0 0 10px #fff; }
     /* faint marker on the downbeat columns */
-    .steps .step:nth-child(4n+1):not(.on):not(.short):not(.play) { background-color: #3c3c3c; }
+    .steps .step:nth-child(4n+1):not(.on):not(.play) { background-color: #3c3c3c; }
 
     /* per-sound SHORT length control (sits after each row's name) */
     .slen {
@@ -738,11 +734,10 @@
         }
     }
 
-    // state: 0 = off, 1 = long (full), 2 = short (truncated)
-    function trigger(key, time, state) {
-        const short = state === 2;
+    // every active step plays the SHORT version; length is per-sound (shortLen)
+    function trigger(key, time) {
         const vol = key === 'snare_ghost' ? 0.32 : 0.9;
-        if (!playWav(key, vol, time, short)) playSynth(key, vol, time, short);
+        if (!playWav(key, vol, time, true)) playSynth(key, vol, time, true);
     }
 
     // ---------- pattern state ----------
@@ -815,7 +810,7 @@
             const slInput = document.createElement('input');
             slInput.type = 'range'; slInput.min = '5'; slInput.max = '100';
             slInput.value = Math.round(shortLen[r.key] * 100);
-            slInput.title = 'Short-hit length for ' + r.name;
+            slInput.title = 'Sample length for ' + r.name;
             const slPct = document.createElement('div');
             slPct.className = 'pct'; slPct.textContent = slInput.value + '%';
             slInput.addEventListener('input', e => {
@@ -832,8 +827,7 @@
                 const c = document.createElement('div');
                 c.className = 'step';
                 c.addEventListener('click', () => {
-                    // cycle Off(0) → Long(1) → Short(2) → Off(0)
-                    grid[r.key][i] = (grid[r.key][i] + 1) % 3;
+                    grid[r.key][i] = grid[r.key][i] ? 0 : 1;   // off / on
                     paintCell(c, grid[r.key][i]);
                     // if we're editing a preset (not a loaded setup / blank), persist it
                     if (presetGrids && currentPreset >= 0 && grid === presetGrids[currentPreset]) {
@@ -855,10 +849,9 @@
         }
     }
 
-    // apply the visual state class to a cell: on = long, short = truncated
+    // apply the visual state class to a cell
     function paintCell(c, state) {
-        c.classList.toggle('on', state === 1);
-        c.classList.toggle('short', state === 2);
+        c.classList.toggle('on', !!state);
     }
 
     function renderCells() {
@@ -914,8 +907,7 @@
 
     function scheduleStep(step, time) {
         ROWS.forEach(r => {
-            const state = grid[r.key][step];
-            if (state) trigger(r.key, time, state);
+            if (grid[r.key][step]) trigger(r.key, time);
         });
     }
 
