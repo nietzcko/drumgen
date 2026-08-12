@@ -171,6 +171,91 @@
         .row .name, .beatbar .spacer { width: 46px; }
         .step { height: 24px; }
     }
+
+    /* ---- panels (setups + midi) ---- */
+    .panel {
+        margin-top: 16px;
+        background: var(--panel);
+        border: 1px solid var(--panel-edge);
+        border-radius: 12px;
+        padding: 14px 14px 16px;
+    }
+    .panel-title {
+        font-size: 10px; letter-spacing: 1px; color: #aaa; font-weight: bold;
+        text-transform: uppercase; margin-bottom: 12px;
+        display: flex; align-items: center; gap: 8px;
+    }
+    .panel-row { display: flex; gap: 8px; align-items: center; }
+    .text-in {
+        flex: 1; background: #1a1a1a; border: 1px solid #444;
+        color: #ccc; border-radius: 8px; padding: 9px 11px; font-size: 13px;
+        outline: none;
+    }
+    .text-in:focus { border-color: var(--accent); }
+    .text-in::placeholder { color: #555; }
+    .mini-btn {
+        background: var(--pad-bg); border: 1px solid #444; color: var(--text-color);
+        border-radius: 8px; padding: 9px 13px; font-size: 11px; font-weight: bold;
+        letter-spacing: .5px; cursor: pointer; text-transform: uppercase; white-space: nowrap;
+    }
+    .mini-btn:active { background: #444; }
+    .mini-btn.accent { color: var(--accent); border-color: #5c2a28; }
+    .mini-btn.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+    .setup-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+    .setup-item {
+        display: flex; align-items: center; gap: 8px;
+        background: #1e1e1e; border: 1px solid var(--panel-edge);
+        border-radius: 8px; padding: 7px 10px;
+    }
+    .setup-item .snm { flex: 1; font-size: 13px; color: #bbb; cursor: pointer; }
+    .setup-item .snm small { color: #666; font-size: 10px; margin-left: 6px; }
+    .setup-item .x {
+        color: #666; cursor: pointer; font-size: 16px; line-height: 1;
+        padding: 0 4px; background: none; border: none;
+    }
+    .setup-item .x:hover { color: var(--accent); }
+    .setup-empty { font-size: 12px; color: #555; padding: 4px 2px; }
+
+    .midi-state {
+        font-size: 9px; padding: 2px 7px; border-radius: 10px;
+        background: #333; color: #888; letter-spacing: 1px;
+    }
+    .midi-state.live { background: #1c3a1c; color: #6bd06b; }
+    .learn-list { display: flex; flex-direction: column; gap: 6px; }
+    .learn-row {
+        display: flex; align-items: center; gap: 10px;
+        background: #1e1e1e; border: 1px solid var(--panel-edge);
+        border-radius: 8px; padding: 8px 10px;
+    }
+    .learn-row .act { flex: 1; font-size: 13px; color: #bbb; font-weight: bold; }
+    .learn-row .bind { font-size: 10px; color: #666; font-family: monospace; min-width: 74px; text-align: right; }
+    .learn-row .bind.set { color: #888; }
+    .learn-row.listening { border-color: var(--accent); }
+    .learn-row.listening .bind { color: var(--accent); }
+    .learn-row.flash { border-color: #6bd06b; }
+    .midi-hint { font-size: 11px; color: #555; margin-top: 10px; line-height: 1.5; }
+    .midi-hint b { color: #888; }
+
+    /* ---- EQ ---- */
+    .eq-bank { display: flex; flex-direction: column; gap: 14px; padding: 4px 0 2px; }
+    .eq-band { display: grid; grid-template-columns: 44px 1fr 56px; align-items: center; gap: 12px; }
+    .eq-lbl { font-size: 11px; letter-spacing: 1px; color: #aaa; text-transform: uppercase; font-weight: bold; }
+    .eq-slider {
+        -webkit-appearance: none; appearance: none;
+        width: 100%; height: 4px; border-radius: 2px; outline: none;
+        background: linear-gradient(#666 0 0) no-repeat center/2px 12px, #444;
+    }
+    .eq-slider::-webkit-slider-thumb {
+        -webkit-appearance: none; appearance: none;
+        width: 18px; height: 18px; border-radius: 50%;
+        background: var(--accent); cursor: pointer; border: 2px solid #1a1a1a;
+    }
+    .eq-slider::-moz-range-thumb {
+        width: 18px; height: 18px; border-radius: 50%;
+        background: var(--accent); cursor: pointer; border: 2px solid #1a1a1a;
+    }
+    .eq-val { font-size: 12px; color: #aaa; font-variant-numeric: tabular-nums; font-weight: bold; text-align: right; }
 </style>
 </head>
 <body>
@@ -203,6 +288,51 @@
     <div class="foot">
         <div class="status">Preset <b id="curName">—</b><span class="cue" id="cueNote"></span></div>
         <div id="wavNote">samples: checking…</div>
+    </div>
+
+    <!-- ---- Setups: save / load / export / import ---- -->
+    <div class="panel" id="setupsPanel">
+        <div class="panel-title">Setups</div>
+        <div class="panel-row">
+            <input type="text" id="setupName" class="text-in" placeholder="Name this setup" maxlength="24">
+            <button class="mini-btn accent" id="saveSetup">Save</button>
+        </div>
+        <div class="setup-list" id="setupList"></div>
+        <div class="panel-row" style="margin-top:10px;">
+            <button class="mini-btn" id="exportSetups">Export file</button>
+            <button class="mini-btn" id="importBtn">Import file</button>
+            <input type="file" id="importFile" accept="application/json" style="display:none;">
+        </div>
+    </div>
+
+    <!-- ---- MIDI: learn a foot controller ---- -->
+    <div class="panel" id="midiPanel">
+        <div class="panel-title">MIDI Foot Control <span id="midiState" class="midi-state">off</span></div>
+        <button class="mini-btn" id="midiEnable" style="width:100%; margin-bottom:10px;">Enable MIDI</button>
+        <div class="learn-list" id="learnList"></div>
+        <div class="midi-hint">Tap <b>Learn</b>, then press the pedal you want to assign. Presets cue and switch at the end of the sequence, same as tapping them.</div>
+    </div>
+
+    <!-- ---- 3-band master EQ ---- -->
+    <div class="panel" id="eqPanel">
+        <div class="panel-title">EQ <button class="mini-btn" id="eqReset" style="margin-left:auto; padding:4px 10px;">Reset</button></div>
+        <div class="eq-bank">
+            <div class="eq-band">
+                <div class="eq-lbl">Low</div>
+                <input type="range" class="eq-slider" id="eqLow"  min="-12" max="12" step="1" value="0">
+                <div class="eq-val" id="eqLowVal">0 dB</div>
+            </div>
+            <div class="eq-band">
+                <div class="eq-lbl">Mid</div>
+                <input type="range" class="eq-slider" id="eqMid"  min="-12" max="12" step="1" value="0">
+                <div class="eq-val" id="eqMidVal">0 dB</div>
+            </div>
+            <div class="eq-band">
+                <div class="eq-lbl">High</div>
+                <input type="range" class="eq-slider" id="eqHigh" min="-12" max="12" step="1" value="0">
+                <div class="eq-val" id="eqHighVal">0 dB</div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -296,14 +426,41 @@
             : 'samples: none found — using synth';
     }
 
+    // ---- master EQ: 3-band (low shelf / mid peak / high shelf) → destination ----
+    let eqLow, eqMid, eqHigh, masterBus;
+    function buildEq() {
+        eqLow = audioCtx.createBiquadFilter();
+        eqLow.type = 'lowshelf';   eqLow.frequency.value = 120;
+        eqMid = audioCtx.createBiquadFilter();
+        eqMid.type = 'peaking';    eqMid.frequency.value = 1000; eqMid.Q.value = 0.9;
+        eqHigh = audioCtx.createBiquadFilter();
+        eqHigh.type = 'highshelf'; eqHigh.frequency.value = 6000;
+        // voices connect to eqLow; chain: low → mid → high → destination
+        eqLow.connect(eqMid); eqMid.connect(eqHigh); eqHigh.connect(audioCtx.destination);
+        masterBus = eqLow;
+        applyEq();
+    }
+    // eqGains in dB, -12..+12
+    const eqGains = { low: 0, mid: 0, high: 0 };
+    function applyEq() {
+        if (!eqLow) return;
+        eqLow.gain.value  = eqGains.low;
+        eqMid.gain.value  = eqGains.mid;
+        eqHigh.gain.value = eqGains.high;
+    }
+
     async function initAudio() {
         if (!audioCtx) {
             const AC = window.AudioContext || window.webkitAudioContext;
             audioCtx = new AC();
+            buildEq();
             await loadWavBuffers();
         }
         if (audioCtx.state === 'suspended') audioCtx.resume();
     }
+
+    // route target for all voices (falls back to destination before EQ is built)
+    function out() { return masterBus || audioCtx.destination; }
 
     function playWav(key, vol, time) {
         if (!wavBuffers[key]) return false;
@@ -311,7 +468,7 @@
         src.buffer = wavBuffers[key];
         const g = audioCtx.createGain();
         g.gain.setValueAtTime(Math.min(1, vol), time);
-        src.connect(g); g.connect(audioCtx.destination);
+        src.connect(g); g.connect(out());
         src.start(time);
         return true;
     }
@@ -320,7 +477,7 @@
     function playSynth(key, vol, time) {
         const g = audioCtx.createGain();
         g.gain.setValueAtTime(vol, time);
-        g.connect(audioCtx.destination);
+        g.connect(out());
         if (key === 'kick') {
             const o = audioCtx.createOscillator();
             o.type = 'sine';
@@ -532,9 +689,8 @@
     }
 
     // ---------- wire up ----------
-    document.getElementById('playBtn').addEventListener('click', () => {
-        isPlaying ? stop() : start();
-    });
+    function togglePlay() { isPlaying ? stop() : start(); }
+    document.getElementById('playBtn').addEventListener('click', togglePlay);
     const bpmSlider = document.getElementById('bpm');
     bpmSlider.addEventListener('input', e => {
         bpm = parseInt(e.target.value);
@@ -547,9 +703,247 @@
         document.getElementById('cueNote').textContent = '';
     });
 
+    // Unified actions that both the UI and a foot controller can fire.
+    // Presets go through choosePreset() so they CUE while playing (swap at loop end).
+    const ACTIONS = [
+        { id: 'play',    label: 'Play / Stop', run: togglePlay },
+        { id: 'preset0', label: 'Preset 1',    run: () => choosePreset(0) },
+        { id: 'preset1', label: 'Preset 2',    run: () => choosePreset(1) },
+        { id: 'preset2', label: 'Preset 3',    run: () => choosePreset(2) },
+        { id: 'preset3', label: 'Preset 4',    run: () => choosePreset(3) },
+    ];
+    function runAction(id) {
+        const a = ACTIONS.find(x => x.id === id);
+        if (a) a.run();
+    }
+
+    /* ================= SETUPS: save / load / export / import ================= */
+    const SETUP_KEY = 'sixteen_setups_v1';
+
+    function readSetups() {
+        try { return JSON.parse(localStorage.getItem(SETUP_KEY)) || []; }
+        catch (e) { return []; }
+    }
+    function writeSetups(list) {
+        try { localStorage.setItem(SETUP_KEY, JSON.stringify(list)); } catch (e) {}
+    }
+    function snapshot() {
+        // full state of a setup
+        const pat = {};
+        ROWS.forEach(r => pat[r.key] = grid[r.key].slice());
+        return { name: '', bpm, pattern: pat, eq: { ...eqGains } };
+    }
+    function applySetup(s) {
+        grid = emptyGrid();
+        for (const key in s.pattern) if (grid[key]) grid[key] = s.pattern[key].slice();
+        if (s.bpm) {
+            bpm = s.bpm;
+            bpmSlider.value = bpm;
+            document.getElementById('bpmVal').textContent = bpm;
+        }
+        currentPreset = -1; cuedPreset = null;
+        renderCells(); renderPresets();
+        // restore EQ if the setup carries it
+        if (s.eq) {
+            ['low','mid','high'].forEach(band => {
+                const db = s.eq[band] || 0;
+                const el = document.getElementById('eq' + cap(band));
+                if (el) el.value = db;
+                if (audioCtx) setEq(band, db); else eqGains[band] = db;
+                document.getElementById('eq' + cap(band) + 'Val').textContent = (db > 0 ? '+' : '') + db + ' dB';
+            });
+        }
+        document.getElementById('curName').textContent = s.name || 'Setup';
+        document.getElementById('cueNote').textContent = '';
+    }
+    function renderSetups() {
+        const list = document.getElementById('setupList');
+        const setups = readSetups();
+        if (!setups.length) {
+            list.innerHTML = '<div class="setup-empty">No saved setups yet.</div>';
+            return;
+        }
+        list.innerHTML = '';
+        setups.forEach((s, i) => {
+            const row = document.createElement('div');
+            row.className = 'setup-item';
+            row.innerHTML = `<span class="snm">${escapeHtml(s.name)}<small>${s.bpm || bpm} BPM</small></span>
+                             <button class="x" title="Delete">×</button>`;
+            row.querySelector('.snm').addEventListener('click', () => applySetup(s));
+            row.querySelector('.x').addEventListener('click', () => {
+                const arr = readSetups(); arr.splice(i, 1); writeSetups(arr); renderSetups();
+            });
+            list.appendChild(row);
+        });
+    }
+    function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    document.getElementById('saveSetup').addEventListener('click', () => {
+        const input = document.getElementById('setupName');
+        const name = (input.value || '').trim() || `Setup ${readSetups().length + 1}`;
+        const s = snapshot(); s.name = name;
+        const arr = readSetups();
+        const existing = arr.findIndex(x => x.name === name);
+        if (existing >= 0) arr[existing] = s; else arr.push(s);
+        writeSetups(arr); renderSetups();
+        input.value = '';
+        document.getElementById('curName').textContent = name;
+    });
+
+    document.getElementById('exportSetups').addEventListener('click', () => {
+        const data = JSON.stringify({ app: 'sixteen', setups: readSetups() }, null, 2);
+        const blob = new Blob([data], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'sixteen-setups.json';
+        a.click(); URL.revokeObjectURL(url);
+    });
+    document.getElementById('importBtn').addEventListener('click', () =>
+        document.getElementById('importFile').click());
+    document.getElementById('importFile').addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            try {
+                const parsed = JSON.parse(reader.result);
+                const incoming = Array.isArray(parsed) ? parsed : parsed.setups;
+                if (!Array.isArray(incoming)) throw new Error('bad format');
+                const arr = readSetups();
+                incoming.forEach(s => {
+                    if (s && s.pattern) {
+                        const idx = arr.findIndex(x => x.name === s.name);
+                        if (idx >= 0) arr[idx] = s; else arr.push(s);
+                    }
+                });
+                writeSetups(arr); renderSetups();
+            } catch (err) {
+                alert('That file could not be read as Sixteen setups.');
+            }
+            e.target.value = '';
+        };
+        reader.readAsText(file);
+    });
+
+    /* ================= MIDI: learn a foot controller ================= */
+    // bindings: actionId -> { type:'note'|'cc', data1, channel }  (channel ignored on match)
+    const MIDI_KEY = 'sixteen_midi_v1';
+    let midiBindings = {};
+    let midiLearning = null;   // actionId currently listening
+    let midiAccess = null;
+
+    function readBindings() {
+        try { return JSON.parse(localStorage.getItem(MIDI_KEY)) || {}; }
+        catch (e) { return {}; }
+    }
+    function writeBindings() {
+        try { localStorage.setItem(MIDI_KEY, JSON.stringify(midiBindings)); } catch (e) {}
+    }
+    function bindLabel(b) {
+        if (!b) return 'unassigned';
+        return b.type === 'note' ? `Note ${b.data1}` : `CC ${b.data1}`;
+    }
+
+    function renderLearn() {
+        const list = document.getElementById('learnList');
+        list.innerHTML = '';
+        ACTIONS.forEach(a => {
+            const row = document.createElement('div');
+            row.className = 'learn-row' + (midiLearning === a.id ? ' listening' : '');
+            row.id = 'learn_' + a.id;
+            const b = midiBindings[a.id];
+            row.innerHTML = `<span class="act">${a.label}</span>
+                <span class="bind ${b ? 'set' : ''}">${midiLearning === a.id ? 'press pedal…' : bindLabel(b)}</span>
+                <button class="mini-btn ${midiLearning === a.id ? 'on' : ''}">${midiLearning === a.id ? 'Cancel' : 'Learn'}</button>`;
+            row.querySelector('button').addEventListener('click', () => {
+                midiLearning = (midiLearning === a.id) ? null : a.id;
+                renderLearn();
+            });
+            list.appendChild(row);
+        });
+    }
+
+    function handleMidi(msg) {
+        const [status, data1, data2] = msg.data;
+        const cmd = status & 0xf0;
+        // note-on with velocity>0, or CC with value>0 (pedal press)
+        let ev = null;
+        if (cmd === 0x90 && data2 > 0) ev = { type: 'note', data1 };
+        else if (cmd === 0xb0 && data2 > 0) ev = { type: 'cc', data1 };
+        if (!ev) return;
+
+        if (midiLearning) {
+            midiBindings[midiLearning] = ev;
+            const learned = midiLearning;
+            midiLearning = null;
+            writeBindings();
+            renderLearn();
+            const row = document.getElementById('learn_' + learned);
+            if (row) { row.classList.add('flash'); setTimeout(() => row.classList.remove('flash'), 400); }
+            return;
+        }
+        // match against bindings
+        for (const actionId in midiBindings) {
+            const b = midiBindings[actionId];
+            if (b.type === ev.type && b.data1 === ev.data1) {
+                runAction(actionId);
+                break;
+            }
+        }
+    }
+
+    async function enableMidi() {
+        const stateEl = document.getElementById('midiState');
+        if (!navigator.requestMIDIAccess) {
+            stateEl.textContent = 'unsupported';
+            alert('Web MIDI is not available in this browser. Try Chrome, Edge, or Opera.');
+            return;
+        }
+        try {
+            midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+            const attach = () => {
+                let count = 0;
+                midiAccess.inputs.forEach(inp => { inp.onmidimessage = handleMidi; count++; });
+                stateEl.textContent = count ? `${count} device${count > 1 ? 's' : ''}` : 'no devices';
+                stateEl.classList.toggle('live', count > 0);
+            };
+            attach();
+            midiAccess.onstatechange = attach;  // re-attach when a pedal is plugged in
+            document.getElementById('midiEnable').textContent = 'MIDI Enabled';
+            document.getElementById('midiEnable').classList.add('on');
+        } catch (e) {
+            stateEl.textContent = 'blocked';
+            alert('MIDI access was blocked. Check the browser permission and try again.');
+        }
+    }
+    document.getElementById('midiEnable').addEventListener('click', enableMidi);
+
+    /* ================= EQ ================= */
+    function setEq(band, db) {
+        eqGains[band] = db;
+        applyEq();
+        document.getElementById('eq' + cap(band) + 'Val').textContent = (db > 0 ? '+' : '') + db + ' dB';
+    }
+    function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+    [['eqLow','low'],['eqMid','mid'],['eqHigh','high']].forEach(([id, band]) => {
+        document.getElementById(id).addEventListener('input', async e => {
+            await initAudio();   // ensure the graph exists so changes are audible immediately
+            setEq(band, parseInt(e.target.value));
+        });
+    });
+    document.getElementById('eqReset').addEventListener('click', () => {
+        ['low','mid','high'].forEach(band => {
+            setEq(band, 0);
+            document.getElementById('eq' + cap(band)).value = 0;
+        });
+    });
+
     // init
     buildGrid();
     loadPreset(0);
+    midiBindings = readBindings();
+    renderSetups();
+    renderLearn();
 </script>
 </body>
 </html>
