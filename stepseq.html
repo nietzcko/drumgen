@@ -127,7 +127,7 @@
 
     /* ---- grid ---- */
     .beatbar { display: flex; align-items: center; margin-bottom: 6px; }
-    .beatbar .spacer { width: 62px; flex-shrink: 0; }
+    .beatbar .spacer { width: 110px; flex-shrink: 0; }
     .beatbar .nums { display: flex; flex: 1; }
     .beatbar .nums span {
         flex: 1; margin: 0 1px; text-align: center;
@@ -151,9 +151,29 @@
         transition: background-color .1s, opacity .1s;
     }
     .step.on { background-color: var(--step-active); }
+    /* SHORT hit: half-filled look (only the beginning plays) */
+    .step.short {
+        background: linear-gradient(90deg, var(--step-active) 0 45%, #5a1f1d 45% 100%);
+    }
     .step.play { background-color: var(--step-current) !important; box-shadow: 0 0 10px #fff; }
     /* faint marker on the downbeat columns */
-    .steps .step:nth-child(4n+1):not(.on):not(.play) { background-color: #3c3c3c; }
+    .steps .step:nth-child(4n+1):not(.on):not(.short):not(.play) { background-color: #3c3c3c; }
+
+    /* per-sound SHORT length control (sits after each row's name) */
+    .slen {
+        width: 40px; flex-shrink: 0; margin-right: 8px;
+        display: flex; flex-direction: column; align-items: center; gap: 2px;
+    }
+    .slen input {
+        -webkit-appearance: none; appearance: none;
+        width: 40px; height: 3px; border-radius: 2px; background: #444; outline: none;
+    }
+    .slen input::-webkit-slider-thumb {
+        -webkit-appearance: none; appearance: none;
+        width: 11px; height: 11px; border-radius: 50%; background: #888; cursor: pointer;
+    }
+    .slen input::-moz-range-thumb { width: 11px; height: 11px; border-radius: 50%; background: #888; cursor: pointer; border: none; }
+    .slen .pct { font-size: 8px; color: #666; font-variant-numeric: tabular-nums; }
 
     .foot {
         margin-top: 20px;
@@ -169,7 +189,10 @@
 
     @media (max-width: 460px) {
         .row .name, .beatbar .spacer { width: 46px; }
+        .beatbar .spacer { width: 88px; }
         .step { height: 24px; }
+        .slen { width: 34px; }
+        .slen input { width: 34px; }
     }
 
     /* ---- panels (setups + midi) ---- */
@@ -625,32 +648,63 @@
         activeSources = [];
     }
 
-    function playWav(key, vol, time) {
+    // Per-sound SHORT length: fraction of the sample played for a "short" hit
+    // (0.05 = just the attack, 1.0 = whole thing). Editable per row in the UI,
+    // persisted in localStorage.
+    const SHORTLEN_KEY = 'sixteen_shortlen_v1';
+    const shortLen = {};   // key -> 0..1
+    ROWS.forEach(r => shortLen[r.key] = 0.18);
+    (function loadShortLen() {
+        try {
+            const s = JSON.parse(localStorage.getItem(SHORTLEN_KEY));
+            if (s) ROWS.forEach(r => { if (typeof s[r.key] === 'number') shortLen[r.key] = s[r.key]; });
+        } catch (e) {}
+    })();
+    function saveShortLen() {
+        try { localStorage.setItem(SHORTLEN_KEY, JSON.stringify(shortLen)); } catch (e) {}
+    }
+
+    // play a wav; if short, truncate to a fraction of its length with a tiny fade
+    function playWav(key, vol, time, short) {
         if (!wavBuffers[key]) return false;
         const src = audioCtx.createBufferSource();
         src.buffer = wavBuffers[key];
         const g = audioCtx.createGain();
         g.gain.setValueAtTime(Math.min(1, vol), time);
         src.connect(g); g.connect(out());
-        src.start(time);
+        if (short) {
+            const full = wavBuffers[key].duration;
+            const dur = Math.max(0.02, full * shortLen[key]);
+            const fade = Math.min(0.015, dur * 0.4);
+            // quick fade-out at the cut so it doesn't click
+            g.gain.setValueAtTime(Math.min(1, vol), time + Math.max(0, dur - fade));
+            g.gain.linearRampToValueAtTime(0.0001, time + dur);
+            src.start(time);
+            src.stop(time + dur + 0.01);
+        } else {
+            src.start(time);
+        }
         trackSource(src);
         return true;
     }
 
     // Synth fallback voices (mirrors the groove app so it sounds the same w/o wavs)
-    function playSynth(key, vol, time) {
+    function playSynth(key, vol, time, short) {
+        const sf = short ? Math.max(0.12, shortLen[key]) : 1;  // decay scale for short hits
         const g = audioCtx.createGain();
         g.gain.setValueAtTime(vol, time);
         g.connect(out());
         if (key === 'kick') {
+            const dur = 0.2 * sf;
             const o = audioCtx.createOscillator();
             o.type = 'sine';
             o.frequency.setValueAtTime(250, time);
-            o.frequency.exponentialRampToValueAtTime(0.001, time + 0.2);
-            g.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
-            o.connect(g); o.start(time); o.stop(time + 0.2);
+            o.frequency.exponentialRampToValueAtTime(0.001, time + dur);
+            g.gain.exponentialRampToValueAtTime(0.001, time + dur);
+            o.connect(g); o.start(time); o.stop(time + dur);
             trackSource(o);
         } else if (key === 'snare' || key === 'snare_ghost') {
+            const dur = 0.25 * sf;
             const o = audioCtx.createOscillator();
             o.type = 'triangle'; o.frequency.setValueAtTime(200, time);
             const noise = audioCtx.createBufferSource();
@@ -661,16 +715,17 @@
             const f = audioCtx.createBiquadFilter();
             f.type = 'highpass'; f.frequency.value = 1000;
             noise.connect(f); f.connect(g); o.connect(g);
-            g.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
-            o.start(time); noise.start(time); o.stop(time + 0.25);
+            g.gain.exponentialRampToValueAtTime(0.001, time + dur);
+            o.start(time); noise.start(time); o.stop(time + dur);
             trackSource(o); trackSource(noise);
         } else {
             // cymbals / hats
             const isCrash = key === 'crash';
             const isOpen = key === 'hihat_open';
-            const dur = isCrash ? 1.5 : (isOpen ? 0.4 : 0.08);
+            const baseDur = isCrash ? 1.5 : (isOpen ? 0.4 : 0.08);
+            const dur = baseDur * sf;
             const noise = audioCtx.createBufferSource();
-            const b = audioCtx.createBuffer(1, audioCtx.sampleRate * dur, audioCtx.sampleRate);
+            const b = audioCtx.createBuffer(1, audioCtx.sampleRate * baseDur, audioCtx.sampleRate);
             const d = b.getChannelData(0);
             for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
             noise.buffer = b;
@@ -678,14 +733,16 @@
             f.type = 'highpass'; f.frequency.value = isCrash ? 4000 : (isOpen ? 5000 : 7000);
             noise.connect(f); f.connect(g);
             g.gain.exponentialRampToValueAtTime(0.001, time + dur);
-            noise.start(time);
+            noise.start(time); noise.stop(time + dur + 0.01);
             trackSource(noise);
         }
     }
 
-    function trigger(key, time) {
+    // state: 0 = off, 1 = long (full), 2 = short (truncated)
+    function trigger(key, time, state) {
+        const short = state === 2;
         const vol = key === 'snare_ghost' ? 0.32 : 0.9;
-        if (!playWav(key, vol, time)) playSynth(key, vol, time);
+        if (!playWav(key, vol, time, short)) playSynth(key, vol, time, short);
     }
 
     // ---------- pattern state ----------
@@ -751,6 +808,23 @@
             row.className = 'row';
             const name = document.createElement('div');
             name.className = 'name'; name.textContent = r.name;
+
+            // per-sound SHORT length control
+            const slen = document.createElement('div');
+            slen.className = 'slen';
+            const slInput = document.createElement('input');
+            slInput.type = 'range'; slInput.min = '5'; slInput.max = '100';
+            slInput.value = Math.round(shortLen[r.key] * 100);
+            slInput.title = 'Short-hit length for ' + r.name;
+            const slPct = document.createElement('div');
+            slPct.className = 'pct'; slPct.textContent = slInput.value + '%';
+            slInput.addEventListener('input', e => {
+                shortLen[r.key] = parseInt(e.target.value) / 100;
+                slPct.textContent = e.target.value + '%';
+                saveShortLen();
+            });
+            slen.appendChild(slInput); slen.appendChild(slPct);
+
             const steps = document.createElement('div');
             steps.className = 'steps';
             cellEls[r.key] = [];
@@ -758,8 +832,9 @@
                 const c = document.createElement('div');
                 c.className = 'step';
                 c.addEventListener('click', () => {
-                    grid[r.key][i] = grid[r.key][i] ? 0 : 1;
-                    c.classList.toggle('on', !!grid[r.key][i]);
+                    // cycle Off(0) → Long(1) → Short(2) → Off(0)
+                    grid[r.key][i] = (grid[r.key][i] + 1) % 3;
+                    paintCell(c, grid[r.key][i]);
                     // if we're editing a preset (not a loaded setup / blank), persist it
                     if (presetGrids && currentPreset >= 0 && grid === presetGrids[currentPreset]) {
                         savePresetGrids();
@@ -768,7 +843,7 @@
                 steps.appendChild(c);
                 cellEls[r.key].push(c);
             }
-            row.appendChild(name); row.appendChild(steps);
+            row.appendChild(name); row.appendChild(slen); row.appendChild(steps);
             gridEl.appendChild(row);
         });
         // beat numbers
@@ -780,10 +855,16 @@
         }
     }
 
+    // apply the visual state class to a cell: on = long, short = truncated
+    function paintCell(c, state) {
+        c.classList.toggle('on', state === 1);
+        c.classList.toggle('short', state === 2);
+    }
+
     function renderCells() {
         ROWS.forEach(r => {
             for (let i = 0; i < STEPS; i++) {
-                cellEls[r.key][i].classList.toggle('on', !!grid[r.key][i]);
+                paintCell(cellEls[r.key][i], grid[r.key][i]);
             }
         });
     }
@@ -833,7 +914,8 @@
 
     function scheduleStep(step, time) {
         ROWS.forEach(r => {
-            if (grid[r.key][step]) trigger(r.key, time);
+            const state = grid[r.key][step];
+            if (state) trigger(r.key, time, state);
         });
     }
 
@@ -979,7 +1061,7 @@
         // full state of a setup
         const pat = {};
         ROWS.forEach(r => pat[r.key] = grid[r.key].slice());
-        return { name: '', bpm, pattern: pat, eq: { ...eqGains }, fx: { ...fx }, fxPreset: activeFxPreset };
+        return { name: '', bpm, pattern: pat, eq: { ...eqGains }, fx: { ...fx }, fxPreset: activeFxPreset, shortLen: { ...shortLen } };
     }
     function applySetup(s) {
         grid = emptyGrid();
@@ -1010,6 +1092,21 @@
             if (audioCtx) applyFx();
             refreshFxUI(); renderFxPresets();
         }
+        // restore per-sound short lengths and update the row sliders
+        if (s.shortLen) {
+            ROWS.forEach(r => { if (typeof s.shortLen[r.key] === 'number') shortLen[r.key] = s.shortLen[r.key]; });
+            saveShortLen(); refreshShortLenUI();
+        }
+    }
+    // refresh the per-row short-length sliders from the shortLen state
+    function refreshShortLenUI() {
+        document.querySelectorAll('.row').forEach((row, idx) => {
+            const r = ROWS[idx]; if (!r) return;
+            const inp = row.querySelector('.slen input');
+            const pct = row.querySelector('.slen .pct');
+            if (inp) inp.value = Math.round(shortLen[r.key] * 100);
+            if (pct) pct.textContent = Math.round(shortLen[r.key] * 100) + '%';
+        });
     }
     function renderSetups() {
         const list = document.getElementById('setupList');
