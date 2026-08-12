@@ -256,6 +256,18 @@
         background: var(--accent); cursor: pointer; border: 2px solid #1a1a1a;
     }
     .eq-val { font-size: 12px; color: #aaa; font-variant-numeric: tabular-nums; font-weight: bold; text-align: right; }
+
+    /* ---- effects presets ---- */
+    .fx-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+    .fx-chip {
+        background: var(--panel); border: 1px solid #444; color: var(--text-color);
+        border-radius: 20px; padding: 7px 13px; font-size: 11px; font-weight: bold;
+        letter-spacing: .5px; cursor: pointer; text-transform: uppercase;
+    }
+    .fx-chip:active { background: #444; }
+    .fx-chip.active { border-color: var(--accent); color: var(--accent); }
+    .fx-sync { font-size: 12px; color: #888; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .fx-sync input { accent-color: var(--accent); width: 16px; height: 16px; }
 </style>
 </head>
 <body>
@@ -334,6 +346,47 @@
                 <input type="range" class="eq-slider" id="eqHigh" min="-12" max="12" step="1" value="0">
                 <div class="eq-val" id="eqHighVal">0 dB</div>
             </div>
+        </div>
+    </div>
+
+    <!-- ---- Effects: filter / crush / delay / reverb + presets ---- -->
+    <div class="panel" id="fxPanel">
+        <div class="panel-title">Effects</div>
+        <div class="fx-presets" id="fxPresets"></div>
+        <div class="eq-bank" style="margin-top:14px;">
+            <div class="eq-band">
+                <div class="eq-lbl">Filter</div>
+                <input type="range" class="eq-slider" id="fxFilterFreq" min="0" max="100" value="100">
+                <div class="eq-val" id="fxFilterVal">open</div>
+            </div>
+            <div class="eq-band">
+                <div class="eq-lbl">Reso</div>
+                <input type="range" class="eq-slider" id="fxFilterQ" min="0" max="100" value="15">
+                <div class="eq-val" id="fxFilterQVal">15%</div>
+            </div>
+            <div class="eq-band">
+                <div class="eq-lbl">Crush</div>
+                <input type="range" class="eq-slider" id="fxCrush" min="0" max="100" value="0">
+                <div class="eq-val" id="fxCrushVal">off</div>
+            </div>
+            <div class="eq-band">
+                <div class="eq-lbl">Delay</div>
+                <input type="range" class="eq-slider" id="fxDelayMix" min="0" max="100" value="0">
+                <div class="eq-val" id="fxDelayVal">0%</div>
+            </div>
+            <div class="eq-band">
+                <div class="eq-lbl">Feedbk</div>
+                <input type="range" class="eq-slider" id="fxDelayFb" min="0" max="95" value="35">
+                <div class="eq-val" id="fxDelayFbVal">35%</div>
+            </div>
+            <div class="eq-band">
+                <div class="eq-lbl">Reverb</div>
+                <input type="range" class="eq-slider" id="fxReverb" min="0" max="100" value="0">
+                <div class="eq-val" id="fxReverbVal">0%</div>
+            </div>
+        </div>
+        <div class="panel-row" style="margin-top:12px;">
+            <label class="fx-sync"><input type="checkbox" id="fxDelaySync" checked> Sync delay to tempo (1/8)</label>
         </div>
     </div>
 </div>
@@ -428,20 +481,93 @@
             : 'samples: none found — using synth';
     }
 
-    // ---- master EQ: 3-band (low shelf / mid peak / high shelf) → destination ----
+    // ---- master effects chain ----
+    // voices → eqLow→eqMid→eqHigh → filter → crusher → (dry + delay + reverb) → out
     let eqLow, eqMid, eqHigh, masterBus;
+    let fxFilter, fxCrusher, dryGain,
+        delayNode, delayFb, delayWet,
+        reverbNode, reverbWet, fxInput;
+
+    // effect params (0..1 unless noted). Recalled by effect presets.
+    const fx = {
+        filterOn: 0,      filterFreq: 1.0,  filterQ: 0.15,   // 1.0 freq = fully open
+        crush: 0,                                            // 0 = off, 1 = heavy
+        delayMix: 0,      delayTime: 0.23,  delayFb: 0.35,   // delayTime in seconds
+        reverbMix: 0,
+    };
+
+    function makeReverbIR(seconds, decay) {
+        const rate = audioCtx.sampleRate;
+        const len = Math.max(1, Math.floor(rate * seconds));
+        const buf = audioCtx.createBuffer(2, len, rate);
+        for (let ch = 0; ch < 2; ch++) {
+            const d = buf.getChannelData(ch);
+            for (let i = 0; i < len; i++) {
+                d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+            }
+        }
+        return buf;
+    }
+
+    // bitcrusher curve for a WaveShaper (quantize amplitude into steps)
+    function makeCrushCurve(bits) {
+        const steps = Math.pow(2, bits);
+        const n = 1024, curve = new Float32Array(n);
+        for (let i = 0; i < n; i++) {
+            const x = (i / (n - 1)) * 2 - 1;
+            curve[i] = Math.round(x * steps) / steps;
+        }
+        return curve;
+    }
+
     function buildEq() {
+        // --- EQ ---
         eqLow = audioCtx.createBiquadFilter();
         eqLow.type = 'lowshelf';   eqLow.frequency.value = 120;
         eqMid = audioCtx.createBiquadFilter();
         eqMid.type = 'peaking';    eqMid.frequency.value = 1000; eqMid.Q.value = 0.9;
         eqHigh = audioCtx.createBiquadFilter();
         eqHigh.type = 'highshelf'; eqHigh.frequency.value = 6000;
-        // voices connect to eqLow; chain: low → mid → high → destination
-        eqLow.connect(eqMid); eqMid.connect(eqHigh); eqHigh.connect(audioCtx.destination);
-        masterBus = eqLow;
+        eqLow.connect(eqMid); eqMid.connect(eqHigh);
+
+        // --- Filter (resonant lowpass sweep) ---
+        fxFilter = audioCtx.createBiquadFilter();
+        fxFilter.type = 'lowpass';
+        fxFilter.frequency.value = 20000;
+        fxFilter.Q.value = 1;
+
+        // --- Bitcrusher (waveshaper) ---
+        fxCrusher = audioCtx.createWaveShaper();
+        fxCrusher.curve = null; // set by applyFx (null = passthrough)
+
+        // chain EQ → filter → crusher → fx split
+        eqHigh.connect(fxFilter);
+        fxFilter.connect(fxCrusher);
+
+        // --- split into dry + delay + reverb, summed to destination ---
+        dryGain = audioCtx.createGain(); dryGain.gain.value = 1;
+        fxCrusher.connect(dryGain); dryGain.connect(audioCtx.destination);
+
+        // Delay (feedback)
+        delayNode = audioCtx.createDelay(2.0);
+        delayFb = audioCtx.createGain();
+        delayWet = audioCtx.createGain(); delayWet.gain.value = 0;
+        fxCrusher.connect(delayNode);
+        delayNode.connect(delayFb); delayFb.connect(delayNode); // feedback loop
+        delayNode.connect(delayWet); delayWet.connect(audioCtx.destination);
+
+        // Reverb (convolver)
+        reverbNode = audioCtx.createConvolver();
+        reverbNode.buffer = makeReverbIR(2.4, 3.0);
+        reverbWet = audioCtx.createGain(); reverbWet.gain.value = 0;
+        fxCrusher.connect(reverbNode);
+        reverbNode.connect(reverbWet); reverbWet.connect(audioCtx.destination);
+
+        masterBus = eqLow;   // voices connect here
         applyEq();
+        applyFx();
     }
+
     // eqGains in dB, -12..+12
     const eqGains = { low: 0, mid: 0, high: 0 };
     function applyEq() {
@@ -449,6 +575,25 @@
         eqLow.gain.value  = eqGains.low;
         eqMid.gain.value  = eqGains.mid;
         eqHigh.gain.value = eqGains.high;
+    }
+
+    function applyFx() {
+        if (!fxFilter) return;
+        const t = audioCtx.currentTime;
+        // Filter: map 0..1 to 200Hz..20kHz (log), bypass (20k) when off
+        const minF = 200, maxF = 20000;
+        const freq = fx.filterOn ? minF * Math.pow(maxF / minF, fx.filterFreq) : 20000;
+        fxFilter.frequency.setTargetAtTime(freq, t, 0.02);
+        fxFilter.Q.setTargetAtTime(fx.filterOn ? (0.5 + fx.filterQ * 18) : 0.0001, t, 0.02);
+        // Crusher: 0 → passthrough (null), else 6..2 bits as crush rises
+        if (fx.crush <= 0.001) fxCrusher.curve = null;
+        else { const bits = Math.round(6 - fx.crush * 4); fxCrusher.curve = makeCrushCurve(Math.max(2, bits)); }
+        // Delay
+        delayNode.delayTime.setTargetAtTime(fx.delayTime, t, 0.02);
+        delayFb.gain.setTargetAtTime(fx.delayFb * 0.9, t, 0.02);
+        delayWet.gain.setTargetAtTime(fx.delayMix, t, 0.02);
+        // Reverb
+        reverbWet.gain.setTargetAtTime(fx.reverbMix, t, 0.02);
     }
 
     async function initAudio() {
@@ -753,6 +898,7 @@
     bpmSlider.addEventListener('input', e => {
         bpm = parseInt(e.target.value);
         document.getElementById('bpmVal').textContent = bpm;
+        if (audioCtx) { syncDelayTime(); applyFx(); }
     });
     document.getElementById('clearBtn').addEventListener('click', () => {
         grid = emptyGrid(); renderCells();
@@ -761,14 +907,26 @@
         document.getElementById('cueNote').textContent = '';
     });
 
+    // Cycle to the next / previous preset. Respects the same cue behavior:
+    // while playing it cues and swaps at the loop end; when stopped it switches now.
+    // Uses the cued target (if any) as the reference so repeated taps step through.
+    function cyclePreset(dir) {
+        const base = (cuedPreset !== null) ? cuedPreset
+                    : (currentPreset >= 0 ? currentPreset : 0);
+        const next = (base + dir + PRESETS.length) % PRESETS.length;
+        choosePreset(next);
+    }
+
     // Unified actions that both the UI and a foot controller can fire.
     // Presets go through choosePreset() so they CUE while playing (swap at loop end).
     const ACTIONS = [
-        { id: 'play',    label: 'Play / Stop', run: togglePlay },
-        { id: 'preset0', label: 'Preset 1',    run: () => choosePreset(0) },
-        { id: 'preset1', label: 'Preset 2',    run: () => choosePreset(1) },
-        { id: 'preset2', label: 'Preset 3',    run: () => choosePreset(2) },
-        { id: 'preset3', label: 'Preset 4',    run: () => choosePreset(3) },
+        { id: 'play',    label: 'Play / Stop',   run: togglePlay },
+        { id: 'prev',    label: 'Previous preset',run: () => cyclePreset(-1) },
+        { id: 'next',    label: 'Next preset',   run: () => cyclePreset(1) },
+        { id: 'preset0', label: 'Preset 1',      run: () => choosePreset(0) },
+        { id: 'preset1', label: 'Preset 2',      run: () => choosePreset(1) },
+        { id: 'preset2', label: 'Preset 3',      run: () => choosePreset(2) },
+        { id: 'preset3', label: 'Preset 4',      run: () => choosePreset(3) },
     ];
     function runAction(id) {
         const a = ACTIONS.find(x => x.id === id);
@@ -789,7 +947,7 @@
         // full state of a setup
         const pat = {};
         ROWS.forEach(r => pat[r.key] = grid[r.key].slice());
-        return { name: '', bpm, pattern: pat, eq: { ...eqGains } };
+        return { name: '', bpm, pattern: pat, eq: { ...eqGains }, fx: { ...fx }, fxPreset: activeFxPreset };
     }
     function applySetup(s) {
         grid = emptyGrid();
@@ -813,6 +971,13 @@
         }
         document.getElementById('curName').textContent = s.name || 'Setup';
         document.getElementById('cueNote').textContent = '';
+        // restore effects
+        if (s.fx) {
+            Object.assign(fx, s.fx);
+            activeFxPreset = (typeof s.fxPreset === 'number') ? s.fxPreset : -1;
+            if (audioCtx) applyFx();
+            refreshFxUI(); renderFxPresets();
+        }
     }
     function renderSetups() {
         const list = document.getElementById('setupList');
@@ -976,6 +1141,80 @@
     }
     document.getElementById('midiEnable').addEventListener('click', enableMidi);
 
+    /* ================= EFFECTS ================= */
+    // Effect presets recall the whole fx object. Names lean into the vibes asked for.
+    const FX_PRESETS = [
+        { name: 'Clean',    fx: { filterOn:0, filterFreq:1.0, filterQ:0.15, crush:0, delayMix:0,    delayTime:0.23, delayFb:0.35, reverbMix:0 } },
+        { name: 'Breakbeat',fx: { filterOn:1, filterFreq:0.72,filterQ:0.35, crush:0.25, delayMix:0.18, delayTime:0.1875, delayFb:0.3, reverbMix:0.12 } },
+        { name: 'Dub Delay',fx: { filterOn:1, filterFreq:0.6, filterQ:0.4,  crush:0, delayMix:0.4,  delayTime:0.375,delayFb:0.6,  reverbMix:0.18 } },
+        { name: 'Washed',   fx: { filterOn:0, filterFreq:1.0, filterQ:0.15, crush:0, delayMix:0.15, delayTime:0.28, delayFb:0.4,  reverbMix:0.55 } },
+        { name: 'Lo-Fi',    fx: { filterOn:1, filterFreq:0.5, filterQ:0.2,  crush:0.6, delayMix:0.1, delayTime:0.2,  delayFb:0.25, reverbMix:0.15 } },
+        { name: 'Telephone',fx: { filterOn:1, filterFreq:0.35,filterQ:0.7,  crush:0.2, delayMix:0,   delayTime:0.2,  delayFb:0.2,  reverbMix:0 } },
+    ];
+    let activeFxPreset = 0;
+
+    function syncDelayTime() {
+        // if tempo-sync is on, set delay to a 1/8 note
+        const syncEl = document.getElementById('fxDelaySync');
+        if (syncEl && syncEl.checked) {
+            fx.delayTime = (60.0 / bpm) / 2;   // eighth note
+        }
+    }
+
+    function refreshFxUI() {
+        const pct = v => Math.round(v * 100) + '%';
+        document.getElementById('fxFilterFreq').value = Math.round(fx.filterFreq * 100);
+        document.getElementById('fxFilterVal').textContent = fx.filterOn ? pct(fx.filterFreq) : 'open';
+        document.getElementById('fxFilterQ').value = Math.round(fx.filterQ * 100);
+        document.getElementById('fxFilterQVal').textContent = pct(fx.filterQ);
+        document.getElementById('fxCrush').value = Math.round(fx.crush * 100);
+        document.getElementById('fxCrushVal').textContent = fx.crush < 0.01 ? 'off' : pct(fx.crush);
+        document.getElementById('fxDelayMix').value = Math.round(fx.delayMix * 100);
+        document.getElementById('fxDelayVal').textContent = pct(fx.delayMix);
+        document.getElementById('fxDelayFb').value = Math.round(fx.delayFb * 100);
+        document.getElementById('fxDelayFbVal').textContent = pct(fx.delayFb);
+        document.getElementById('fxReverb').value = Math.round(fx.reverbMix * 100);
+        document.getElementById('fxReverbVal').textContent = pct(fx.reverbMix);
+    }
+
+    function renderFxPresets() {
+        const wrap = document.getElementById('fxPresets');
+        wrap.innerHTML = '';
+        FX_PRESETS.forEach((p, idx) => {
+            const b = document.createElement('button');
+            b.className = 'fx-chip' + (idx === activeFxPreset ? ' active' : '');
+            b.textContent = p.name;
+            b.addEventListener('click', async () => {
+                await initAudio();
+                Object.assign(fx, p.fx);
+                activeFxPreset = idx;
+                syncDelayTime();
+                applyFx(); refreshFxUI(); renderFxPresets();
+            });
+            wrap.appendChild(b);
+        });
+    }
+
+    // manual slider control (marks preset as custom)
+    function fxSlider(id, apply) {
+        document.getElementById(id).addEventListener('input', async e => {
+            await initAudio();
+            apply(parseInt(e.target.value) / 100);
+            // any manual tweak means we're no longer on a named preset
+            activeFxPreset = -1;
+            syncDelayTime(); applyFx(); refreshFxUI(); renderFxPresets();
+        });
+    }
+    fxSlider('fxFilterFreq', v => { fx.filterFreq = v; fx.filterOn = v < 0.995 ? 1 : 0; });
+    fxSlider('fxFilterQ',    v => { fx.filterQ = v; });
+    fxSlider('fxCrush',      v => { fx.crush = v; });
+    fxSlider('fxDelayMix',   v => { fx.delayMix = v; });
+    fxSlider('fxDelayFb',    v => { fx.delayFb = v; });
+    fxSlider('fxReverb',     v => { fx.reverbMix = v; });
+    document.getElementById('fxDelaySync').addEventListener('change', async () => {
+        await initAudio(); syncDelayTime(); applyFx();
+    });
+
     /* ================= EQ ================= */
     function setEq(band, db) {
         eqGains[band] = db;
@@ -1003,6 +1242,8 @@
     midiBindings = readBindings();
     renderSetups();
     renderLearn();
+    renderFxPresets();
+    refreshFxUI();
 
     // reset all four presets back to their factory patterns
     document.getElementById('resetPresets').addEventListener('click', () => {
