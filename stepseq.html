@@ -603,7 +603,9 @@
             buildEq();
             await loadWavBuffers();
         }
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (audioCtx.state === 'suspended') {
+            try { await audioCtx.resume(); } catch (e) {}
+        }
     }
 
     // route target for all voices (falls back to destination before EQ is built)
@@ -856,6 +858,13 @@
 
     function scheduler() {
         if (!isPlaying) return;   // don't reschedule if we've stopped
+        // If the tab was backgrounded, setTimeout was throttled and the audio clock
+        // has run far past nextNoteTime. Re-anchor instead of bursting a catch-up
+        // flood of notes (which would sound like a glitch on return).
+        if (nextNoteTime < audioCtx.currentTime - 0.2) {
+            nextNoteTime = audioCtx.currentTime + 0.06;
+            currentStep = currentStep % STEPS;
+        }
         while (nextNoteTime < audioCtx.currentTime + scheduleAhead) {
             const stepToPlay = currentStep;
             const timeToPlay = nextNoteTime;
@@ -893,6 +902,29 @@
 
     // ---------- wire up ----------
     function togglePlay() { isPlaying ? stop() : start(); }
+
+    // Browsers suspend the AudioContext and throttle timers when the tab is hidden.
+    // On return: resume the context, and if we were playing, re-anchor the clock and
+    // kick the scheduler back to life (its setTimeout loop may have been frozen).
+    function reviveAudio() {
+        if (!audioCtx) return;
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume().catch(() => {});
+        }
+        if (isPlaying) {
+            nextNoteTime = audioCtx.currentTime + 0.06;  // re-anchor after any drift
+            clearTimeout(timerID);
+            timerID = null;
+            scheduler();                                 // ensure the loop is running
+            const btn = document.getElementById('playBtn');
+            btn.textContent = '■'; btn.classList.add('playing');
+        }
+    }
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reviveAudio();
+    });
+    window.addEventListener('focus', reviveAudio);
+    window.addEventListener('pageshow', reviveAudio);
     document.getElementById('playBtn').addEventListener('click', togglePlay);
     const bpmSlider = document.getElementById('bpm');
     bpmSlider.addEventListener('input', e => {
