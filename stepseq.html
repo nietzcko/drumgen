@@ -152,8 +152,28 @@
     }
     .step.on { background-color: var(--step-active); }
     .step.play { background-color: var(--step-current) !important; box-shadow: 0 0 10px #fff; }
+    /* steps beyond this preset's loop length */
+    .step.disabled { background-color: #232323 !important; opacity: .45; cursor: default; box-shadow: none !important; }
     /* faint marker on the downbeat columns */
-    .steps .step:nth-child(4n+1):not(.on):not(.play) { background-color: #3c3c3c; }
+    .steps .step:nth-child(4n+1):not(.on):not(.play):not(.disabled) { background-color: #3c3c3c; }
+
+    /* step-count control */
+    .steps-ctl {
+        display: flex; align-items: center; gap: 10px;
+        background: var(--panel); border: 1px solid var(--panel-edge);
+        border-radius: 10px; padding: 9px 12px; margin-bottom: 16px;
+    }
+    .steps-ctl label {
+        font-size: 10px; letter-spacing: 1px; color: #aaa;
+        font-weight: bold; text-transform: uppercase;
+    }
+    .steps-ctl input[type=range] { flex: 1; margin-top: 0; }
+    .steps-ctl .val {
+        font-size: 15px; font-weight: bold; color: #ccc;
+        font-variant-numeric: tabular-nums; min-width: 22px; text-align: right;
+    }
+    .steps-ctl .hint { font-size: 10px; color: var(--accent); min-width: 34px; }
+    .beatbar .nums span.disabled { opacity: .3; }
 
     /* per-sound SHORT length control (sits after each row's name) */
     .slen {
@@ -310,6 +330,13 @@
 
     <div class="presets" id="presets"></div>
 
+    <div class="steps-ctl">
+        <label>Steps</label>
+        <input type="range" id="stepCount" min="1" max="16" value="16">
+        <span class="val" id="stepCountVal">16</span>
+        <span class="hint" id="stepHint"></span>
+    </div>
+
     <div class="beatbar">
         <div class="spacer"></div>
         <div class="nums" id="beatNums"></div>
@@ -420,11 +447,13 @@
    the switch happens when the current 16-step sequence loops.
    ============================================================ */
 
-    const STEPS = 16;
+    const MAX_STEPS = 16;         // grid arrays are always this long
+    let STEPS = 16;               // how many are actually USED (per preset)
 
     // Instrument rows, top → bottom. `key` maps to the sample/synth voice.
     const ROWS = [
         { key: 'crash',        name: 'Crash' },
+        { key: 'ride',         name: 'Ride' },
         { key: 'hihat_open',   name: 'Open HH' },
         { key: 'hihat_closed', name: 'Closed HH' },
         { key: 'snare',        name: 'Snare' },
@@ -432,12 +461,13 @@
         { key: 'kick',         name: 'Kick' },
     ];
 
-    // ---- Four presets. Each is { name, pattern: { rowKey: [16 bits] } } ----
-    // 1 = hit. Rows omitted default to empty.
+    // ---- Four presets. Each is { name, steps, pattern: { rowKey: [bits] } } ----
+    // 1 = hit. Rows omitted default to empty. `steps` sets the loop length
+    // (16 = 4/4, 12 = 3/4, etc). Patterns shorter than 16 are padded.
     const P = (s) => s.split('').map(c => c === 'x' ? 1 : 0);
     const PRESETS = [
         {
-            name: 'Four/Floor',
+            name: 'Four/Floor', steps: 16,
             pattern: {
                 kick:         P('x...x...x...x...'),
                 snare:        P('....x.......x...'),
@@ -447,25 +477,25 @@
             }
         },
         {
-            name: 'Backbeat',
+            name: 'Backbeat', steps: 16,
             pattern: {
                 kick:         P('x.....x.x.......'),
                 snare:        P('....x.......x...'),
                 snare_ghost:  P('..x...x...x...x.'),
-                hihat_closed: P('x.x.x.x.x.x.x.x.'),
+                ride:         P('x.x.x.x.x.x.x.x.'),
             }
         },
         {
-            name: 'Half-Time',
+            name: 'Waltz 3/4', steps: 12,
             pattern: {
-                kick:         P('x.......x.x.....'),
-                snare:        P('........x.......'),
-                hihat_closed: P('x...x...x...x...'),
-                crash:        P('x.......x.......'),
+                kick:         P('x.......x...'),
+                snare:        P('....x...x...'),
+                ride:         P('x...x...x...'),
+                hihat_closed: P('..x...x...x.'),
             }
         },
         {
-            name: 'D-Beat',
+            name: 'D-Beat', steps: 16,
             pattern: {
                 kick:         P('x...x...x...x...'),
                 snare:        P('..x...x...x...x.'),
@@ -480,7 +510,8 @@
     const wavBuffers = {};
     const wavFiles = {
         kick: 'kick.wav', snare: 'snare.wav', snare_ghost: 'snare_ghost.wav',
-        hihat_closed: 'hihat_closed.wav', hihat_open: 'hihat_open.wav', crash: 'crash.wav',
+        hihat_closed: 'hihat_closed.wav', hihat_open: 'hihat_open.wav',
+        crash: 'crash.wav', ride: 'ride.wav',
     };
 
     async function loadWavBuffers() {
@@ -496,7 +527,7 @@
         }
         const note = document.getElementById('wavNote');
         note.textContent = loaded > 0
-            ? `samples: ${loaded}/6 loaded`
+            ? `samples: ${loaded}/${Object.keys(wavFiles).length} loaded`
             : 'samples: none found — using synth';
     }
 
@@ -715,10 +746,11 @@
             o.start(time); noise.start(time); o.stop(time + dur);
             trackSource(o); trackSource(noise);
         } else {
-            // cymbals / hats
+            // cymbals / hats / ride
             const isCrash = key === 'crash';
+            const isRide  = key === 'ride';
             const isOpen = key === 'hihat_open';
-            const baseDur = isCrash ? 1.5 : (isOpen ? 0.4 : 0.08);
+            const baseDur = isCrash ? 1.5 : (isRide ? 0.9 : (isOpen ? 0.4 : 0.08));
             const dur = baseDur * sf;
             const noise = audioCtx.createBufferSource();
             const b = audioCtx.createBuffer(1, audioCtx.sampleRate * baseDur, audioCtx.sampleRate);
@@ -726,7 +758,13 @@
             for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
             noise.buffer = b;
             const f = audioCtx.createBiquadFilter();
-            f.type = 'highpass'; f.frequency.value = isCrash ? 4000 : (isOpen ? 5000 : 7000);
+            if (isRide) {
+                // softer, more focused than a crash: bandpass gives a pingier, gentler tone
+                f.type = 'bandpass'; f.frequency.value = 3200; f.Q.value = 0.9;
+                g.gain.setValueAtTime(vol * 0.5, time);   // ride sits back in the mix
+            } else {
+                f.type = 'highpass'; f.frequency.value = isCrash ? 4000 : (isOpen ? 5000 : 7000);
+            }
             noise.connect(f); f.connect(g);
             g.gain.exponentialRampToValueAtTime(0.001, time + dur);
             noise.start(time); noise.stop(time + dur + 0.01);
@@ -736,7 +774,7 @@
 
     // every active step plays the SHORT version; length is per-sound (shortLen)
     function trigger(key, time) {
-        const vol = key === 'snare_ghost' ? 0.32 : 0.9;
+        const vol = key === 'snare_ghost' ? 0.32 : (key === 'ride' ? 0.6 : 0.9);
         if (!playWav(key, vol, time, true)) playSynth(key, vol, time, true);
     }
 
@@ -745,47 +783,66 @@
     let grid = {};
     function emptyGrid() {
         const g = {};
-        ROWS.forEach(r => g[r.key] = new Array(STEPS).fill(0));
+        ROWS.forEach(r => g[r.key] = new Array(MAX_STEPS).fill(0));
         return g;
     }
 
-    // Per-preset WORKING grids. These hold your edits so switching presets and
-    // coming back keeps what you changed. Seeded from the factory PRESETS, then
-    // persisted to localStorage so they survive a reload.
-    const PGRID_KEY = 'sixteen_presetgrids_v1';
+    // Per-preset WORKING grids + STEP COUNTS. These hold your edits so switching
+    // presets and coming back keeps what you changed. Seeded from the factory
+    // PRESETS, then persisted to localStorage so they survive a reload.
+    const PGRID_KEY = 'sixteen_presetgrids_v2';
     function presetToGrid(idx) {
         const g = emptyGrid();
         const pat = PRESETS[idx].pattern;
-        for (const key in pat) if (g[key]) g[key] = pat[key].slice();
+        for (const key in pat) if (g[key]) g[key] = pat[key].slice(0, MAX_STEPS);
+        // pad short factory patterns out to MAX_STEPS
+        ROWS.forEach(r => { while (g[r.key].length < MAX_STEPS) g[r.key].push(0); });
         return g;
     }
     let presetGrids = null;
+    let presetSteps = null;   // per-preset step count (how many steps are used)
+
     function loadPresetGrids() {
         let saved = null;
         try { saved = JSON.parse(localStorage.getItem(PGRID_KEY)); } catch (e) {}
+        const savedGrids = saved && saved.grids;
+        const savedSteps = saved && saved.steps;
         presetGrids = PRESETS.map((_, idx) => {
-            // validate a saved grid has all rows at length 16, else fall back to factory
-            const s = saved && saved[idx];
-            if (s && ROWS.every(r => Array.isArray(s[r.key]) && s[r.key].length === STEPS)) {
+            const s = savedGrids && savedGrids[idx];
+            if (s && ROWS.every(r => Array.isArray(s[r.key]))) {
                 const g = emptyGrid();
-                ROWS.forEach(r => g[r.key] = s[r.key].slice());
+                ROWS.forEach(r => {
+                    const arr = s[r.key].slice(0, MAX_STEPS);
+                    while (arr.length < MAX_STEPS) arr.push(0);
+                    g[r.key] = arr;
+                });
                 return g;
             }
             return presetToGrid(idx);
         });
+        presetSteps = PRESETS.map((p, idx) => {
+            const v = savedSteps && savedSteps[idx];
+            if (typeof v === 'number' && v >= 1 && v <= MAX_STEPS) return v;
+            return p.steps || MAX_STEPS;
+        });
     }
     function savePresetGrids() {
-        try { localStorage.setItem(PGRID_KEY, JSON.stringify(presetGrids)); } catch (e) {}
+        try {
+            localStorage.setItem(PGRID_KEY, JSON.stringify({ grids: presetGrids, steps: presetSteps }));
+        } catch (e) {}
     }
 
     function loadPreset(idx) {
         if (!presetGrids) loadPresetGrids();
         // point the live grid at this preset's working copy (edits write through)
         grid = presetGrids[idx];
+        STEPS = presetSteps[idx];           // this preset's loop length
         currentPreset = idx;
         cuedPreset = null;
+        if (currentStep >= STEPS) currentStep = 0;
         renderCells();
         renderPresets();
+        refreshStepCountUI();
         document.getElementById('curName').textContent = PRESETS[idx].name;
         document.getElementById('cueNote').textContent = '';
     }
@@ -823,10 +880,11 @@
             const steps = document.createElement('div');
             steps.className = 'steps';
             cellEls[r.key] = [];
-            for (let i = 0; i < STEPS; i++) {
+            for (let i = 0; i < MAX_STEPS; i++) {
                 const c = document.createElement('div');
                 c.className = 'step';
                 c.addEventListener('click', () => {
+                    if (i >= STEPS) return;             // outside this preset's length
                     grid[r.key][i] = grid[r.key][i] ? 0 : 1;   // off / on
                     paintCell(c, grid[r.key][i]);
                     // if we're editing a preset (not a loaded setup / blank), persist it
@@ -840,9 +898,10 @@
             row.appendChild(name); row.appendChild(slen); row.appendChild(steps);
             gridEl.appendChild(row);
         });
-        // beat numbers
+        // beat numbers (built for MAX_STEPS; dimmed beyond the active length)
         const nums = document.getElementById('beatNums');
-        for (let i = 0; i < STEPS; i++) {
+        nums.innerHTML = '';
+        for (let i = 0; i < MAX_STEPS; i++) {
             const s = document.createElement('span');
             s.textContent = (i % 4 === 0) ? (i / 4 + 1) : '';
             nums.appendChild(s);
@@ -856,10 +915,15 @@
 
     function renderCells() {
         ROWS.forEach(r => {
-            for (let i = 0; i < STEPS; i++) {
-                paintCell(cellEls[r.key][i], grid[r.key][i]);
+            for (let i = 0; i < MAX_STEPS; i++) {
+                const c = cellEls[r.key][i];
+                paintCell(c, i < STEPS ? grid[r.key][i] : 0);
+                c.classList.toggle('disabled', i >= STEPS);   // beyond the loop length
             }
         });
+        const nums = document.getElementById('beatNums');
+        if (nums) Array.from(nums.children).forEach((s, i) =>
+            s.classList.toggle('disabled', i >= STEPS));
     }
 
     function renderPresets() {
@@ -1053,16 +1117,26 @@
         // full state of a setup
         const pat = {};
         ROWS.forEach(r => pat[r.key] = grid[r.key].slice());
-        return { name: '', bpm, pattern: pat, eq: { ...eqGains }, fx: { ...fx }, fxPreset: activeFxPreset, shortLen: { ...shortLen } };
+        return { name: '', bpm, steps: STEPS, pattern: pat, eq: { ...eqGains }, fx: { ...fx }, fxPreset: activeFxPreset, shortLen: { ...shortLen } };
     }
     function applySetup(s) {
         grid = emptyGrid();
-        for (const key in s.pattern) if (grid[key]) grid[key] = s.pattern[key].slice();
+        for (const key in s.pattern) {
+            if (grid[key]) {
+                const arr = s.pattern[key].slice(0, MAX_STEPS);
+                while (arr.length < MAX_STEPS) arr.push(0);
+                grid[key] = arr;
+            }
+        }
         if (s.bpm) {
             bpm = s.bpm;
             bpmSlider.value = bpm;
             document.getElementById('bpmVal').textContent = bpm;
         }
+        // restore the loop length
+        STEPS = (typeof s.steps === 'number' && s.steps >= 1 && s.steps <= MAX_STEPS) ? s.steps : MAX_STEPS;
+        if (currentStep >= STEPS) currentStep = 0;
+        refreshStepCountUI();
         currentPreset = -1; cuedPreset = null;
         renderCells(); renderPresets();
         // restore EQ if the setup carries it
@@ -1262,8 +1336,40 @@
     }
     document.getElementById('midiEnable').addEventListener('click', enableMidi);
 
-    /* ================= EFFECTS ================= */
+    /* ================= STEP COUNT (per preset) ================= */
+    // A rough time-signature hint so 12 reads as 3/4, 16 as 4/4, etc.
+    function meterHint(n) {
+        if (n === 16) return '4/4';
+        if (n === 12) return '3/4';
+        if (n === 8)  return '2/4';
+        if (n === 6)  return '6/8';
+        if (n === 14) return '7/8';
+        if (n === 10) return '5/8';
+        if (n === 4)  return '1/4';
+        return '';
+    }
+    function refreshStepCountUI() {
+        const el = document.getElementById('stepCount');
+        if (!el) return;
+        el.value = STEPS;
+        document.getElementById('stepCountVal').textContent = STEPS;
+        document.getElementById('stepHint').textContent = meterHint(STEPS);
+    }
+    document.getElementById('stepCount').addEventListener('input', e => {
+        STEPS = Math.max(1, Math.min(MAX_STEPS, parseInt(e.target.value)));
+        // store it against the current preset so each preset keeps its own length
+        if (presetSteps && currentPreset >= 0) {
+            presetSteps[currentPreset] = STEPS;
+            savePresetGrids();
+        }
+        if (currentStep >= STEPS) currentStep = 0;
+        refreshStepCountUI();
+        renderCells();
+    });
+
+
     // Effect presets recall the whole fx object. Names lean into the vibes asked for.
+    /* ================= EFFECTS ================= */
     const FX_PRESETS = [
         { name: 'Clean',    fx: { filterOn:0, filterFreq:1.0, filterQ:0.15, crush:0, delayMix:0,    delayTime:0.23, delayFb:0.35, reverbMix:0 } },
         { name: 'Breakbeat',fx: { filterOn:1, filterFreq:0.72,filterQ:0.35, crush:0.25, delayMix:0.18, delayTime:0.1875, delayFb:0.3, reverbMix:0.12 } },
