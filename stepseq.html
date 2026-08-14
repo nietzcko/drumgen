@@ -175,6 +175,37 @@
     .steps-ctl .hint { font-size: 10px; color: var(--accent); min-width: 34px; }
     .beatbar .nums span.disabled { opacity: .3; }
 
+    /* roll mode */
+    .roll-btn {
+        background: var(--pad-bg); border: 1px solid #444; color: var(--text-color);
+        border-radius: 8px; padding: 7px 12px; font-size: 10px; font-weight: bold;
+        letter-spacing: 1px; cursor: pointer; text-transform: uppercase; white-space: nowrap;
+    }
+    .roll-btn.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+    /* while roll mode is active, make the grid feel like a different mode */
+    .grid.rollmode .step { cursor: cell; }
+    .grid.rollmode .steps .step:not(.disabled):hover { outline: 1px solid var(--accent); }
+
+    /* a step with a ratchet (>1) shows its hit count */
+    .step {
+        display: flex; align-items: center; justify-content: center;
+        font-size: 9px; font-weight: bold; color: transparent;
+        font-variant-numeric: tabular-nums;
+    }
+    .step.ratchet {
+        color: #fff;
+        background-image: repeating-linear-gradient(
+            90deg, rgba(255,255,255,.30) 0 1px, transparent 1px 4px);
+    }
+    /* chance mode visuals: a sub-100% step is dimmed in proportion to its odds */
+    .grid.chancemode .step { cursor: help; }
+    .grid.chancemode .steps .step:not(.disabled):hover { outline: 1px solid var(--accent); }
+    .step.chance75 { opacity: .78; }
+    .step.chance50 { opacity: .55; }
+    .step.chance25 { opacity: .34; }
+    /* dashed border marks a probabilistic step even when it's not lit */
+    .step.hasChance { box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); }
+
     /* per-sound SHORT length control (sits after each row's name) */
     .slen {
         width: 40px; flex-shrink: 0; margin-right: 8px;
@@ -335,6 +366,15 @@
         <input type="range" id="stepCount" min="1" max="16" value="16">
         <span class="val" id="stepCountVal">16</span>
         <span class="hint" id="stepHint"></span>
+        <button class="roll-btn" id="rollMode" title="Roll mode: tap steps to set a ratchet (2/3/4/6/8 hits inside one step)">ROLL</button>
+        <button class="roll-btn" id="chanceMode" title="Chance mode: tap steps to set how often they fire (100/75/50/25%)">CHANCE</button>
+    </div>
+
+    <div class="steps-ctl">
+        <label>Human</label>
+        <input type="range" id="humanize" min="0" max="100" value="0">
+        <span class="val" id="humanizeVal">0</span>
+        <span class="hint">drift</span>
     </div>
 
     <div class="beatbar">
@@ -450,6 +490,18 @@
     const MAX_STEPS = 16;         // grid arrays are always this long
     let STEPS = 16;               // how many are actually USED (per preset)
 
+    // Ratchet ladder: how many times a step retriggers within its own slot.
+    // 1 = normal single hit. Higher values give trap hi-hat rolls / metal bursts.
+    const RATCHETS = [1, 2, 3, 4, 6, 8];
+    let rollMode = false;         // when true, tapping a step cycles its ratchet
+
+    // Probability ladder: how likely a step is to actually fire each time round.
+    // 100 = always (the default). Lower values make hits flicker in and out so
+    // the loop never repeats exactly.
+    const CHANCES = [100, 75, 50, 25];
+    let chanceMode = false;       // when true, tapping a step cycles its chance
+    let humanize = 0;             // 0..1 global timing + velocity drift
+
     // Instrument rows, top → bottom. `key` maps to the sample/synth voice.
     const ROWS = [
         { key: 'crash',        name: 'Crash' },
@@ -461,10 +513,15 @@
         { key: 'kick',         name: 'Kick' },
     ];
 
-    // ---- Four presets. Each is { name, steps, pattern: { rowKey: [bits] } } ----
-    // 1 = hit. Rows omitted default to empty. `steps` sets the loop length
-    // (16 = 4/4, 12 = 3/4, etc). Patterns shorter than 16 are padded.
-    const P = (s) => s.split('').map(c => c === 'x' ? 1 : 0);
+    // ---- Presets. Each is { name, steps, pattern: { rowKey: [counts] } } ----
+    // In a pattern string: '.' = off, 'x' = single hit, and a DIGIT (2-8) = a
+    // ratchet, i.e. that many retriggers packed inside that one step. That's how
+    // trap hi-hat rolls and metal bursts are written. `steps` sets loop length.
+    const P = (s) => s.split('').map(c => {
+        if (c === 'x') return 1;
+        const d = parseInt(c);
+        return (!isNaN(d) && d >= 2 && d <= 8) ? d : 0;
+    });
     const PRESETS = [
         {
             name: 'Four/Floor', steps: 16,
@@ -477,12 +534,20 @@
             }
         },
         {
-            name: 'Backbeat', steps: 16,
+            name: 'Trap', steps: 16,
             pattern: {
-                kick:         P('x.....x.x.......'),
-                snare:        P('....x.......x...'),
-                snare_ghost:  P('..x...x...x...x.'),
-                ride:         P('x.x.x.x.x.x.x.x.'),
+                // classic trap: sparse 808 kick, snare on 3, and hats that break
+                // into fast rolls (the 3/4/6 ratchets below)
+                kick:         P('x......x..x.....'),
+                snare:        P('........x.......'),
+                hihat_closed: P('x.x.3.x.x.4.x.6.'),
+                snare_ghost:  P('...x.....x....x.'),
+            },
+            // per-step odds: the ghost snares and the busiest hat rolls only fire
+            // sometimes, so the loop breathes instead of repeating exactly
+            chance: {
+                snare_ghost:  [100,100,100,50,100,100,100,100,100,50,100,100,100,100,25,100],
+                hihat_closed: [100,100,100,100,75,100,100,100,100,100,50,100,100,100,50,100],
             }
         },
         {
@@ -495,11 +560,12 @@
             }
         },
         {
-            name: 'D-Beat', steps: 16,
+            name: 'Metal Blast', steps: 16,
             pattern: {
-                kick:         P('x...x...x...x...'),
+                // double-kick bursts via ratchets, blast-style snare, ride on top
+                kick:         P('4...4...4...4.4.'),
                 snare:        P('..x...x...x...x.'),
-                hihat_closed: P('x.x.x.x.x.x.x.x.'),
+                ride:         P('x.x.x.x.x.x.x.x.'),
                 crash:        P('x...............'),
             }
         },
@@ -772,25 +838,33 @@
         }
     }
 
-    // every active step plays the SHORT version; length is per-sound (shortLen)
-    function trigger(key, time) {
-        const vol = key === 'snare_ghost' ? 0.32 : (key === 'ride' ? 0.6 : 0.9);
+    // every active step plays the SHORT version; length is per-sound (shortLen).
+    // `gainMul` lets ratchet rolls taper instead of sounding machine-gunned.
+    function trigger(key, time, gainMul) {
+        const base = key === 'snare_ghost' ? 0.32 : (key === 'ride' ? 0.6 : 0.9);
+        const vol = base * (gainMul === undefined ? 1 : gainMul);
         if (!playWav(key, vol, time, true)) playSynth(key, vol, time, true);
     }
 
     // ---------- pattern state ----------
     // live grid: { rowKey: [16] }
     let grid = {};
+    let probs = {};               // parallel to grid: per-step fire chance (0..100)
     function emptyGrid() {
         const g = {};
         ROWS.forEach(r => g[r.key] = new Array(MAX_STEPS).fill(0));
         return g;
     }
+    function fullProbs() {
+        const p = {};
+        ROWS.forEach(r => p[r.key] = new Array(MAX_STEPS).fill(100));
+        return p;
+    }
 
-    // Per-preset WORKING grids + STEP COUNTS. These hold your edits so switching
-    // presets and coming back keeps what you changed. Seeded from the factory
-    // PRESETS, then persisted to localStorage so they survive a reload.
-    const PGRID_KEY = 'sixteen_presetgrids_v2';
+    // Per-preset WORKING grids + PROBABILITIES + STEP COUNTS. These hold your edits
+    // so switching presets and coming back keeps what you changed. Seeded from the
+    // factory PRESETS, then persisted to localStorage so they survive a reload.
+    const PGRID_KEY = 'sixteen_presetgrids_v4';
     function presetToGrid(idx) {
         const g = emptyGrid();
         const pat = PRESETS[idx].pattern;
@@ -799,13 +873,25 @@
         ROWS.forEach(r => { while (g[r.key].length < MAX_STEPS) g[r.key].push(0); });
         return g;
     }
+    function presetToProbs(idx) {
+        const p = fullProbs();
+        const pat = PRESETS[idx].chance;      // optional per-preset chance map
+        if (pat) for (const key in pat) if (p[key]) {
+            const arr = pat[key].slice(0, MAX_STEPS);
+            while (arr.length < MAX_STEPS) arr.push(100);
+            p[key] = arr;
+        }
+        return p;
+    }
     let presetGrids = null;
+    let presetProbs = null;   // per-preset probability layer
     let presetSteps = null;   // per-preset step count (how many steps are used)
 
     function loadPresetGrids() {
         let saved = null;
         try { saved = JSON.parse(localStorage.getItem(PGRID_KEY)); } catch (e) {}
         const savedGrids = saved && saved.grids;
+        const savedProbs = saved && saved.probs;
         const savedSteps = saved && saved.steps;
         presetGrids = PRESETS.map((_, idx) => {
             const s = savedGrids && savedGrids[idx];
@@ -820,6 +906,19 @@
             }
             return presetToGrid(idx);
         });
+        presetProbs = PRESETS.map((_, idx) => {
+            const s = savedProbs && savedProbs[idx];
+            if (s && ROWS.every(r => Array.isArray(s[r.key]))) {
+                const p = fullProbs();
+                ROWS.forEach(r => {
+                    const arr = s[r.key].slice(0, MAX_STEPS);
+                    while (arr.length < MAX_STEPS) arr.push(100);
+                    p[r.key] = arr;
+                });
+                return p;
+            }
+            return presetToProbs(idx);
+        });
         presetSteps = PRESETS.map((p, idx) => {
             const v = savedSteps && savedSteps[idx];
             if (typeof v === 'number' && v >= 1 && v <= MAX_STEPS) return v;
@@ -828,7 +927,9 @@
     }
     function savePresetGrids() {
         try {
-            localStorage.setItem(PGRID_KEY, JSON.stringify({ grids: presetGrids, steps: presetSteps }));
+            localStorage.setItem(PGRID_KEY, JSON.stringify({
+                grids: presetGrids, probs: presetProbs, steps: presetSteps
+            }));
         } catch (e) {}
     }
 
@@ -836,6 +937,7 @@
         if (!presetGrids) loadPresetGrids();
         // point the live grid at this preset's working copy (edits write through)
         grid = presetGrids[idx];
+        probs = presetProbs[idx];
         STEPS = presetSteps[idx];           // this preset's loop length
         currentPreset = idx;
         cuedPreset = null;
@@ -885,8 +987,24 @@
                 c.className = 'step';
                 c.addEventListener('click', () => {
                     if (i >= STEPS) return;             // outside this preset's length
-                    grid[r.key][i] = grid[r.key][i] ? 0 : 1;   // off / on
-                    paintCell(c, grid[r.key][i]);
+                    if (chanceMode) {
+                        // cycle the fire probability: 100 → 75 → 50 → 25 → 100
+                        const cur = (probs[r.key][i] === undefined) ? 100 : probs[r.key][i];
+                        const ci = CHANCES.indexOf(cur);
+                        probs[r.key][i] = CHANCES[(ci === -1 ? 0 : ci + 1) % CHANCES.length];
+                        // setting a chance on an empty step turns it on, else you'd
+                        // be dialing odds for a hit that doesn't exist
+                        if (!grid[r.key][i]) grid[r.key][i] = 1;
+                    } else if (rollMode) {
+                        // cycle the ratchet: 1 → 2 → 3 → 4 → 6 → 8 → back to 1
+                        const cur = grid[r.key][i] || 0;
+                        const idx = RATCHETS.indexOf(cur);
+                        grid[r.key][i] = (idx === -1) ? 2 : RATCHETS[(idx + 1) % RATCHETS.length];
+                    } else {
+                        grid[r.key][i] = grid[r.key][i] ? 0 : 1;   // off / on
+                        if (!grid[r.key][i]) probs[r.key][i] = 100;  // clearing resets odds
+                    }
+                    paintCell(c, grid[r.key][i], probs[r.key][i]);
                     // if we're editing a preset (not a loaded setup / blank), persist it
                     if (presetGrids && currentPreset >= 0 && grid === presetGrids[currentPreset]) {
                         savePresetGrids();
@@ -908,16 +1026,26 @@
         }
     }
 
-    // apply the visual state class to a cell
-    function paintCell(c, state) {
+    // apply the visual state class to a cell. The cell's value IS its hit count,
+    // and its probability dims it proportionally.
+    function paintCell(c, state, chance) {
         c.classList.toggle('on', !!state);
+        c.classList.toggle('ratchet', state > 1);
+        c.textContent = state > 1 ? state : '';
+        const p = (chance === undefined) ? 100 : chance;
+        c.classList.toggle('chance75', p === 75);
+        c.classList.toggle('chance50', p === 50);
+        c.classList.toggle('chance25', p === 25);
+        c.classList.toggle('hasChance', p < 100 && !!state);
     }
 
     function renderCells() {
         ROWS.forEach(r => {
             for (let i = 0; i < MAX_STEPS; i++) {
                 const c = cellEls[r.key][i];
-                paintCell(c, i < STEPS ? grid[r.key][i] : 0);
+                const active = i < STEPS;
+                paintCell(c, active ? grid[r.key][i] : 0,
+                             active && probs[r.key] ? probs[r.key][i] : 100);
                 c.classList.toggle('disabled', i >= STEPS);   // beyond the loop length
             }
         });
@@ -969,9 +1097,33 @@
 
     function secPerStep() { return (60.0 / bpm) / 4; } // 16th notes
 
+    // A cell's value IS its ratchet count: 0 = off, 1 = single hit,
+    // 2/3/4/6/8 = that many evenly-spaced retriggers inside the one step.
+    // Each step also carries a PROBABILITY (probs) — the dice are rolled fresh
+    // every pass, so sub-100% steps flicker in and out and the loop never repeats
+    // exactly. `humanize` adds subtle timing + velocity drift on top.
     function scheduleStep(step, time) {
+        const stepDur = secPerStep();
         ROWS.forEach(r => {
-            if (grid[r.key][step]) trigger(r.key, time);
+            const n = grid[r.key][step];
+            if (!n) return;
+            // roll the dice for this step, this pass
+            const chance = (probs[r.key] && probs[r.key][step] !== undefined)
+                         ? probs[r.key][step] : 100;
+            if (chance < 100 && Math.random() * 100 >= chance) return;
+
+            // humanize: timing drift (up to ~18ms) and velocity drift
+            const tJit = humanize ? (Math.random() - 0.5) * 0.036 * humanize : 0;
+            const vJit = () => humanize ? 1 - Math.random() * 0.45 * humanize : 1;
+
+            if (n === 1) { trigger(r.key, Math.max(0, time + tJit), vJit()); return; }
+            const sub = stepDur / n;
+            for (let k = 0; k < n; k++) {
+                // slight taper across the roll so it sounds played, not machine-gunned
+                const accent = (k === 0) ? 1.0 : 0.72 + 0.18 * (k / Math.max(1, n - 1));
+                const kJit = humanize ? (Math.random() - 0.5) * 0.012 * humanize : 0;
+                trigger(r.key, Math.max(0, time + k * sub + tJit + kJit), accent * vJit());
+            }
         });
     }
 
@@ -1071,7 +1223,7 @@
         if (audioCtx) { syncDelayTime(); applyFx(); }
     });
     document.getElementById('clearBtn').addEventListener('click', () => {
-        grid = emptyGrid(); renderCells();
+        grid = emptyGrid(); probs = fullProbs(); renderCells();
         document.getElementById('curName').textContent = 'Blank';
         currentPreset = -1; cuedPreset = null; renderPresets();
         document.getElementById('cueNote').textContent = '';
@@ -1115,18 +1267,35 @@
     }
     function snapshot() {
         // full state of a setup
-        const pat = {};
-        ROWS.forEach(r => pat[r.key] = grid[r.key].slice());
-        return { name: '', bpm, steps: STEPS, pattern: pat, eq: { ...eqGains }, fx: { ...fx }, fxPreset: activeFxPreset, shortLen: { ...shortLen } };
+        const pat = {}, pch = {};
+        ROWS.forEach(r => {
+            pat[r.key] = grid[r.key].slice();
+            pch[r.key] = (probs[r.key] || []).slice();
+        });
+        return { name: '', bpm, steps: STEPS, pattern: pat, chance: pch, humanize,
+                 eq: { ...eqGains }, fx: { ...fx }, fxPreset: activeFxPreset, shortLen: { ...shortLen } };
     }
     function applySetup(s) {
         grid = emptyGrid();
+        probs = fullProbs();
         for (const key in s.pattern) {
             if (grid[key]) {
                 const arr = s.pattern[key].slice(0, MAX_STEPS);
                 while (arr.length < MAX_STEPS) arr.push(0);
                 grid[key] = arr;
             }
+        }
+        if (s.chance) for (const key in s.chance) {
+            if (probs[key]) {
+                const arr = s.chance[key].slice(0, MAX_STEPS);
+                while (arr.length < MAX_STEPS) arr.push(100);
+                probs[key] = arr;
+            }
+        }
+        if (typeof s.humanize === 'number') {
+            humanize = s.humanize;
+            document.getElementById('humanize').value = Math.round(humanize * 100);
+            document.getElementById('humanizeVal').textContent = Math.round(humanize * 100);
         }
         if (s.bpm) {
             bpm = s.bpm;
@@ -1335,6 +1504,26 @@
         }
     }
     document.getElementById('midiEnable').addEventListener('click', enableMidi);
+
+    /* ================= ROLL / CHANCE MODES + HUMANIZE ================= */
+    function setModes(roll, chance) {
+        rollMode = roll; chanceMode = chance;
+        document.getElementById('rollMode').classList.toggle('on', rollMode);
+        document.getElementById('chanceMode').classList.toggle('on', chanceMode);
+        const g = document.getElementById('grid');
+        g.classList.toggle('rollmode', rollMode);
+        g.classList.toggle('chancemode', chanceMode);
+    }
+    document.getElementById('rollMode').addEventListener('click', () => {
+        setModes(!rollMode, false);        // modes are mutually exclusive
+    });
+    document.getElementById('chanceMode').addEventListener('click', () => {
+        setModes(false, !chanceMode);
+    });
+    document.getElementById('humanize').addEventListener('input', e => {
+        humanize = parseInt(e.target.value) / 100;
+        document.getElementById('humanizeVal').textContent = e.target.value;
+    });
 
     /* ================= STEP COUNT (per preset) ================= */
     // A rough time-signature hint so 12 reads as 3/4, 16 as 4/4, etc.
