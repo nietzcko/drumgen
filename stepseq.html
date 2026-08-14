@@ -524,49 +524,63 @@
     });
     const PRESETS = [
         {
-            name: 'Four/Floor', steps: 16,
+            // 1. SOFT — ambient / acoustic. Stripped back: a single snare on 3,
+            // just a couple of kick accents, and hi-hat carrying the whole pulse.
+            // Low odds on some hats keep it breathing instead of looping flat.
+            name: 'Soft', steps: 16,
             pattern: {
-                kick:         P('x...x...x...x...'),
-                snare:        P('....x.......x...'),
+                kick:         P('x.........x.....'),
+                snare:        P('........x.......'),
                 hihat_closed: P('x.x.x.x.x.x.x.x.'),
-                hihat_open:   P('..x...x...x...x.'),
-                crash:        P('x...............'),
+            },
+            chance: {
+                hihat_closed: [100,100,75,100,100,100,50,100,100,100,75,100,100,100,50,100],
+                kick:         [100,100,100,100,100,100,100,100,100,100,75,100,100,100,100,100],
             }
         },
         {
+            // 2. TRAP — sparse 808 kick, snare on 3, hats breaking into fast rolls.
             name: 'Trap', steps: 16,
             pattern: {
-                // classic trap: sparse 808 kick, snare on 3, and hats that break
-                // into fast rolls (the 3/4/6 ratchets below)
                 kick:         P('x......x..x.....'),
                 snare:        P('........x.......'),
                 hihat_closed: P('x.x.3.x.x.4.x.6.'),
                 snare_ghost:  P('...x.....x....x.'),
             },
-            // per-step odds: the ghost snares and the busiest hat rolls only fire
-            // sometimes, so the loop breathes instead of repeating exactly
             chance: {
                 snare_ghost:  [100,100,100,50,100,100,100,100,100,50,100,100,100,100,25,100],
                 hihat_closed: [100,100,100,100,75,100,100,100,100,100,50,100,100,100,50,100],
             }
         },
         {
-            name: 'Waltz 3/4', steps: 12,
+            // 3. ROCK — straight backbeat, driving 8th hats, syncopated kick.
+            name: 'Rock', steps: 16,
             pattern: {
-                kick:         P('x.......x...'),
-                snare:        P('....x...x...'),
-                ride:         P('x...x...x...'),
-                hihat_closed: P('..x...x...x.'),
+                kick:         P('x.....x.x.....x.'),
+                snare:        P('....x.......x...'),
+                snare_ghost:  P('..x..x....x..x..'),
+                hihat_closed: P('x.x.x.x.x.x.x.x.'),
+                crash:        P('x...............'),
+            },
+            chance: {
+                snare_ghost:  [100,100,50,100,100,50,100,100,100,100,50,100,100,50,100,100],
+                kick:         [100,100,100,100,100,100,100,100,100,100,100,100,100,100,75,100],
             }
         },
         {
-            name: 'Metal Blast', steps: 16,
+            // 4. HEAVY BREAKDOWN — half-time crushing groove with double-kick
+            // ratchet bursts and trap-style hat rolls layered on top.
+            name: 'Heavy', steps: 16,
             pattern: {
-                // double-kick bursts via ratchets, blast-style snare, ride on top
-                kick:         P('4...4...4...4.4.'),
-                snare:        P('..x...x...x...x.'),
-                ride:         P('x.x.x.x.x.x.x.x.'),
-                crash:        P('x...............'),
+                kick:         P('x..4..x.x..4.44.'),
+                snare:        P('....x.......x...'),
+                hihat_closed: P('....6.......4.6.'),
+                ride:         P('x...x...x...x...'),
+                crash:        P('x.......x.......'),
+            },
+            chance: {
+                hihat_closed: [100,100,100,100,75,100,100,100,100,100,100,100,100,100,50,100],
+                kick:         [100,100,100,100,100,100,100,100,100,100,100,100,100,100,75,100],
             }
         },
     ];
@@ -864,7 +878,7 @@
     // Per-preset WORKING grids + PROBABILITIES + STEP COUNTS. These hold your edits
     // so switching presets and coming back keeps what you changed. Seeded from the
     // factory PRESETS, then persisted to localStorage so they survive a reload.
-    const PGRID_KEY = 'sixteen_presetgrids_v4';
+    const PGRID_KEY = 'sixteen_presetgrids_v6';
     function presetToGrid(idx) {
         const g = emptyGrid();
         const pat = PRESETS[idx].pattern;
