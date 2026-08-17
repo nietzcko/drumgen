@@ -127,7 +127,7 @@
 
     /* ---- grid ---- */
     .beatbar { display: flex; align-items: center; margin-bottom: 6px; }
-    .beatbar .spacer { width: 110px; flex-shrink: 0; }
+    .beatbar .spacer { width: 62px; flex-shrink: 0; }
     .beatbar .nums { display: flex; flex: 1; }
     .beatbar .nums span {
         flex: 1; margin: 0 1px; text-align: center;
@@ -176,6 +176,10 @@
     .beatbar .nums span.disabled { opacity: .3; }
 
     /* roll mode */
+    .mode-row {
+        display: flex; gap: 8px; margin-bottom: 16px;
+    }
+    .mode-row .roll-btn { flex: 1; padding: 11px 8px; font-size: 11px; }
     .roll-btn {
         background: var(--pad-bg); border: 1px solid #444; color: var(--text-color);
         border-radius: 8px; padding: 7px 12px; font-size: 10px; font-weight: bold;
@@ -206,21 +210,20 @@
     /* dashed border marks a probabilistic step even when it's not lit */
     .step.hasChance { box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); }
 
-    /* per-sound SHORT length control (sits after each row's name) */
-    .slen {
-        width: 40px; flex-shrink: 0; margin-right: 8px;
-        display: flex; flex-direction: column; align-items: center; gap: 2px;
-    }
-    .slen input {
-        -webkit-appearance: none; appearance: none;
-        width: 40px; height: 3px; border-radius: 2px; background: #444; outline: none;
-    }
-    .slen input::-webkit-slider-thumb {
-        -webkit-appearance: none; appearance: none;
-        width: 11px; height: 11px; border-radius: 50%; background: #888; cursor: pointer;
-    }
-    .slen input::-moz-range-thumb { width: 11px; height: 11px; border-radius: 50%; background: #888; cursor: pointer; border: none; }
-    .slen .pct { font-size: 8px; color: #666; font-variant-numeric: tabular-nums; }
+    /* velocity shows as how much of the cell is filled (quieter = shorter bar) */
+    .step.vel75 { background-image: linear-gradient(to top, var(--step-active) 75%, #4a1a19 75%); }
+    .step.vel50 { background-image: linear-gradient(to top, var(--step-active) 50%, #4a1a19 50%); }
+    .step.vel30 { background-image: linear-gradient(to top, var(--step-active) 30%, #4a1a19 30%); }
+    /* two-digit labels need to shrink to fit the cell */
+    .step.tiny { font-size: 8px; }
+    .grid.velmode .step { cursor: ns-resize; }
+    .grid.velmode .steps .step:not(.disabled):hover { outline: 1px solid var(--accent); }
+
+    /* clicking a row name selects it for the big Length slider */
+    .row .name { cursor: pointer; user-select: none; }
+    .row .name:hover { color: #ddd; }
+    .row .name.sel { color: var(--accent); }
+    .row .name.sel::after { content: ' ‹'; }
 
     .foot {
         margin-top: 20px;
@@ -236,10 +239,7 @@
 
     @media (max-width: 460px) {
         .row .name, .beatbar .spacer { width: 46px; }
-        .beatbar .spacer { width: 88px; }
         .step { height: 24px; }
-        .slen { width: 34px; }
-        .slen input { width: 34px; }
     }
 
     /* ---- panels (setups + midi) ---- */
@@ -338,6 +338,25 @@
     .fx-chip.active { border-color: var(--accent); color: var(--accent); }
     .fx-sync { font-size: 12px; color: #888; display: flex; align-items: center; gap: 8px; cursor: pointer; }
     .fx-sync input { accent-color: var(--accent); width: 16px; height: 16px; }
+    /* ---- sample editor ---- */
+    .samp-name { color: var(--accent); text-transform: none; font-size: 12px; }
+    .wave {
+        width: 100%; height: 78px; display: block;
+        background: #151515; border: 1px solid var(--panel-edge);
+        border-radius: 8px; margin-bottom: 12px;
+    }
+    .samp-ctl { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+    .samp-ctl label {
+        width: 62px; flex-shrink: 0;
+        font-size: 10px; letter-spacing: 1px; color: #aaa;
+        font-weight: bold; text-transform: uppercase;
+    }
+    .samp-ctl input[type=range] { flex: 1; margin-top: 0; }
+    .samp-ctl .val {
+        font-size: 13px; font-weight: bold; color: #ccc;
+        font-variant-numeric: tabular-nums; width: 34px; text-align: right;
+    }
+    .samp-hint { font-size: 11px; color: #555; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -366,8 +385,12 @@
         <input type="range" id="stepCount" min="1" max="16" value="16">
         <span class="val" id="stepCountVal">16</span>
         <span class="hint" id="stepHint"></span>
+    </div>
+
+    <div class="mode-row">
         <button class="roll-btn" id="rollMode" title="Roll mode: tap steps to set a ratchet (2/3/4/6/8 hits inside one step)">ROLL</button>
-        <button class="roll-btn" id="chanceMode" title="Chance mode: tap steps to set how often they fire (100/75/50/25%)">CHANCE</button>
+        <button class="roll-btn" id="chanceMode" title="Chance mode: tap steps to set how often they fire">CHANCE</button>
+        <button class="roll-btn" id="velMode" title="Velocity mode: tap steps to set how loud they hit">VEL</button>
     </div>
 
     <div class="steps-ctl">
@@ -377,11 +400,48 @@
         <span class="hint">drift</span>
     </div>
 
+    <div class="steps-ctl">
+        <label>Vel rnd</label>
+        <input type="range" id="velRandom" min="0" max="100" value="0">
+        <span class="val" id="velRandomVal">0</span>
+        <span class="hint">random</span>
+    </div>
+
     <div class="beatbar">
         <div class="spacer"></div>
         <div class="nums" id="beatNums"></div>
     </div>
     <div class="grid" id="grid"></div>
+
+    <div class="panel" id="samplePanel">
+        <div class="panel-title">
+            Sample: <span id="sampName" class="samp-name">Kick</span>
+            <button class="mini-btn" id="sampAudition" style="margin-left:auto; padding:4px 10px;">▶ Test</button>
+        </div>
+        <canvas id="waveCanvas" class="wave"></canvas>
+        <div class="samp-ctl">
+            <label>Length</label>
+            <input type="range" id="lenSlider" min="5" max="100" value="18">
+            <span class="val" id="lenVal">18</span>
+        </div>
+        <div class="samp-ctl">
+            <label>Volume</label>
+            <input type="range" id="volSlider" min="0" max="150" value="100">
+            <span class="val" id="volVal">100</span>
+        </div>
+        <div class="samp-ctl">
+            <label>Fade in</label>
+            <input type="range" id="fiSlider" min="0" max="90" value="0">
+            <span class="val" id="fiVal">0</span>
+        </div>
+        <div class="samp-ctl">
+            <label>Fade out</label>
+            <input type="range" id="foSlider" min="0" max="90" value="25">
+            <span class="val" id="foVal">25</span>
+        </div>
+        <div class="samp-hint">Tap a row name in the grid to edit that sound.</div>
+    </div>
+
 
     <div class="foot">
         <div class="status">Preset <b id="curName">—</b><span class="cue" id="cueNote"></span>
@@ -502,6 +562,11 @@
     let chanceMode = false;       // when true, tapping a step cycles its chance
     let humanize = 0;             // 0..1 global timing + velocity drift
 
+    // Velocity ladder: per-step loudness as a percentage of the sound's base level.
+    const VELOCITIES = [100, 75, 50, 30];
+    let velMode = false;          // when true, tapping a step cycles its velocity
+    let velRandom = 0;            // 0..1 amount of random velocity variation
+
     // Instrument rows, top → bottom. `key` maps to the sample/synth voice.
     const ROWS = [
         { key: 'crash',        name: 'Crash' },
@@ -609,6 +674,7 @@
         note.textContent = loaded > 0
             ? `samples: ${loaded}/${Object.keys(wavFiles).length} loaded`
             : 'samples: none found — using synth';
+        if (typeof drawWave === 'function') drawWave();   // now we can show waveforms
     }
 
     // ---- master effects chain ----
@@ -759,38 +825,74 @@
     // (0.05 = just the attack, 1.0 = whole thing). Editable per row in the UI,
     // persisted in localStorage.
     const SHORTLEN_KEY = 'sixteen_shortlen_v1';
-    const shortLen = {};   // key -> 0..1
-    ROWS.forEach(r => shortLen[r.key] = 0.18);
+    const shortLen = {};   // key -> 0..1  (how much of the sample plays)
+    const sampVol  = {};   // key -> 0..1.5 (per-sample volume trim)
+    const fadeIn   = {};   // key -> 0..1  (fraction of the played length)
+    const fadeOut  = {};   // key -> 0..1  (fraction of the played length)
+    ROWS.forEach(r => {
+        shortLen[r.key] = 0.18;
+        sampVol[r.key]  = 1.0;
+        fadeIn[r.key]   = 0.0;
+        fadeOut[r.key]  = 0.25;
+    });
     (function loadShortLen() {
         try {
             const s = JSON.parse(localStorage.getItem(SHORTLEN_KEY));
-            if (s) ROWS.forEach(r => { if (typeof s[r.key] === 'number') shortLen[r.key] = s[r.key]; });
+            if (s) ROWS.forEach(r => {
+                const v = s[r.key];
+                if (typeof v === 'number') shortLen[r.key] = v;          // legacy format
+                else if (v && typeof v === 'object') {
+                    if (typeof v.len === 'number') shortLen[r.key] = v.len;
+                    if (typeof v.vol === 'number') sampVol[r.key]  = v.vol;
+                    if (typeof v.fi  === 'number') fadeIn[r.key]   = v.fi;
+                    if (typeof v.fo  === 'number') fadeOut[r.key]  = v.fo;
+                }
+            });
         } catch (e) {}
     })();
     function saveShortLen() {
-        try { localStorage.setItem(SHORTLEN_KEY, JSON.stringify(shortLen)); } catch (e) {}
+        try {
+            const out = {};
+            ROWS.forEach(r => out[r.key] = {
+                len: shortLen[r.key], vol: sampVol[r.key],
+                fi: fadeIn[r.key], fo: fadeOut[r.key]
+            });
+            localStorage.setItem(SHORTLEN_KEY, JSON.stringify(out));
+        } catch (e) {}
     }
 
-    // play a wav; if short, truncate to a fraction of its length with a tiny fade
+    // play a wav, truncated to the sample's length setting, with per-sample
+    // volume trim and fade in / fade out shaping.
     function playWav(key, vol, time, short) {
         if (!wavBuffers[key]) return false;
         const src = audioCtx.createBufferSource();
         src.buffer = wavBuffers[key];
         const g = audioCtx.createGain();
-        g.gain.setValueAtTime(Math.min(1, vol), time);
+        const peak = Math.min(1.6, vol * (sampVol[key] === undefined ? 1 : sampVol[key]));
         src.connect(g); g.connect(out());
-        if (short) {
-            const full = wavBuffers[key].duration;
-            const dur = Math.max(0.02, full * shortLen[key]);
-            const fade = Math.min(0.015, dur * 0.4);
-            // quick fade-out at the cut so it doesn't click
-            g.gain.setValueAtTime(Math.min(1, vol), time + Math.max(0, dur - fade));
-            g.gain.linearRampToValueAtTime(0.0001, time + dur);
-            src.start(time);
-            src.stop(time + dur + 0.01);
+
+        const full = wavBuffers[key].duration;
+        const dur = short ? Math.max(0.02, full * shortLen[key]) : full;
+        const fi = Math.min(dur * 0.9, dur * (fadeIn[key] || 0));
+        const fo = Math.min(dur - fi, dur * (fadeOut[key] || 0));
+
+        if (fi > 0.001) {
+            g.gain.setValueAtTime(0.0001, time);
+            g.gain.linearRampToValueAtTime(peak, time + fi);
         } else {
-            src.start(time);
+            g.gain.setValueAtTime(peak, time);
         }
+        if (fo > 0.001) {
+            g.gain.setValueAtTime(peak, time + Math.max(fi, dur - fo));
+            g.gain.linearRampToValueAtTime(0.0001, time + dur);
+        } else if (short) {
+            // tiny declick fade at the cut
+            const fade = Math.min(0.015, dur * 0.4);
+            g.gain.setValueAtTime(peak, time + Math.max(0, dur - fade));
+            g.gain.linearRampToValueAtTime(0.0001, time + dur);
+        }
+        src.start(time);
+        if (short || fo > 0.001) src.stop(time + dur + 0.01);
         trackSource(src);
         return true;
     }
@@ -798,6 +900,7 @@
     // Synth fallback voices (mirrors the groove app so it sounds the same w/o wavs)
     function playSynth(key, vol, time, short) {
         const sf = short ? Math.max(0.12, shortLen[key]) : 1;  // decay scale for short hits
+        vol = Math.min(1.6, vol * (sampVol[key] === undefined ? 1 : sampVol[key]));
         const g = audioCtx.createGain();
         g.gain.setValueAtTime(vol, time);
         g.connect(out());
@@ -864,6 +967,7 @@
     // live grid: { rowKey: [16] }
     let grid = {};
     let probs = {};               // parallel to grid: per-step fire chance (0..100)
+    let vels = {};                // parallel to grid: per-step velocity (0..100)
     function emptyGrid() {
         const g = {};
         ROWS.forEach(r => g[r.key] = new Array(MAX_STEPS).fill(0));
@@ -874,11 +978,16 @@
         ROWS.forEach(r => p[r.key] = new Array(MAX_STEPS).fill(100));
         return p;
     }
+    function fullVels() {
+        const v = {};
+        ROWS.forEach(r => v[r.key] = new Array(MAX_STEPS).fill(100));
+        return v;
+    }
 
     // Per-preset WORKING grids + PROBABILITIES + STEP COUNTS. These hold your edits
     // so switching presets and coming back keeps what you changed. Seeded from the
     // factory PRESETS, then persisted to localStorage so they survive a reload.
-    const PGRID_KEY = 'sixteen_presetgrids_v6';
+    const PGRID_KEY = 'sixteen_presetgrids_v7';
     function presetToGrid(idx) {
         const g = emptyGrid();
         const pat = PRESETS[idx].pattern;
@@ -897,8 +1006,19 @@
         }
         return p;
     }
+    function presetToVels(idx) {
+        const v = fullVels();
+        const pat = PRESETS[idx].velocity;    // optional per-preset velocity map
+        if (pat) for (const key in pat) if (v[key]) {
+            const arr = pat[key].slice(0, MAX_STEPS);
+            while (arr.length < MAX_STEPS) arr.push(100);
+            v[key] = arr;
+        }
+        return v;
+    }
     let presetGrids = null;
     let presetProbs = null;   // per-preset probability layer
+    let presetVels = null;    // per-preset velocity layer
     let presetSteps = null;   // per-preset step count (how many steps are used)
 
     function loadPresetGrids() {
@@ -933,6 +1053,19 @@
             }
             return presetToProbs(idx);
         });
+        presetVels = PRESETS.map((_, idx) => {
+            const s = saved && saved.vels && saved.vels[idx];
+            if (s && ROWS.every(r => Array.isArray(s[r.key]))) {
+                const v = fullVels();
+                ROWS.forEach(r => {
+                    const arr = s[r.key].slice(0, MAX_STEPS);
+                    while (arr.length < MAX_STEPS) arr.push(100);
+                    v[r.key] = arr;
+                });
+                return v;
+            }
+            return presetToVels(idx);
+        });
         presetSteps = PRESETS.map((p, idx) => {
             const v = savedSteps && savedSteps[idx];
             if (typeof v === 'number' && v >= 1 && v <= MAX_STEPS) return v;
@@ -942,7 +1075,7 @@
     function savePresetGrids() {
         try {
             localStorage.setItem(PGRID_KEY, JSON.stringify({
-                grids: presetGrids, probs: presetProbs, steps: presetSteps
+                grids: presetGrids, probs: presetProbs, vels: presetVels, steps: presetSteps
             }));
         } catch (e) {}
     }
@@ -952,6 +1085,7 @@
         // point the live grid at this preset's working copy (edits write through)
         grid = presetGrids[idx];
         probs = presetProbs[idx];
+        vels = presetVels[idx];
         STEPS = presetSteps[idx];           // this preset's loop length
         currentPreset = idx;
         cuedPreset = null;
@@ -976,22 +1110,9 @@
             row.className = 'row';
             const name = document.createElement('div');
             name.className = 'name'; name.textContent = r.name;
-
-            // per-sound SHORT length control
-            const slen = document.createElement('div');
-            slen.className = 'slen';
-            const slInput = document.createElement('input');
-            slInput.type = 'range'; slInput.min = '5'; slInput.max = '100';
-            slInput.value = Math.round(shortLen[r.key] * 100);
-            slInput.title = 'Sample length for ' + r.name;
-            const slPct = document.createElement('div');
-            slPct.className = 'pct'; slPct.textContent = slInput.value + '%';
-            slInput.addEventListener('input', e => {
-                shortLen[r.key] = parseInt(e.target.value) / 100;
-                slPct.textContent = e.target.value + '%';
-                saveShortLen();
-            });
-            slen.appendChild(slInput); slen.appendChild(slPct);
+            // clicking the row name selects that sound for the big Length slider
+            name.addEventListener('click', () => selectRow(r.key));
+            name.dataset.key = r.key;
 
             const steps = document.createElement('div');
             steps.className = 'steps';
@@ -1001,7 +1122,13 @@
                 c.className = 'step';
                 c.addEventListener('click', () => {
                     if (i >= STEPS) return;             // outside this preset's length
-                    if (chanceMode) {
+                    if (velMode) {
+                        // cycle the step velocity: 100 → 75 → 50 → 30 → 100
+                        const cur = (vels[r.key][i] === undefined) ? 100 : vels[r.key][i];
+                        const vi = VELOCITIES.indexOf(cur);
+                        vels[r.key][i] = VELOCITIES[(vi === -1 ? 0 : vi + 1) % VELOCITIES.length];
+                        if (!grid[r.key][i]) grid[r.key][i] = 1;
+                    } else if (chanceMode) {
                         // cycle the fire probability: 100 → 75 → 50 → 25 → 100
                         const cur = (probs[r.key][i] === undefined) ? 100 : probs[r.key][i];
                         const ci = CHANCES.indexOf(cur);
@@ -1016,9 +1143,12 @@
                         grid[r.key][i] = (idx === -1) ? 2 : RATCHETS[(idx + 1) % RATCHETS.length];
                     } else {
                         grid[r.key][i] = grid[r.key][i] ? 0 : 1;   // off / on
-                        if (!grid[r.key][i]) probs[r.key][i] = 100;  // clearing resets odds
+                        if (!grid[r.key][i]) {
+                            probs[r.key][i] = 100;   // clearing resets odds
+                            vels[r.key][i] = 100;    // ...and velocity
+                        }
                     }
-                    paintCell(c, grid[r.key][i], probs[r.key][i]);
+                    paintCell(c, grid[r.key][i], probs[r.key][i], vels[r.key][i]);
                     // if we're editing a preset (not a loaded setup / blank), persist it
                     if (presetGrids && currentPreset >= 0 && grid === presetGrids[currentPreset]) {
                         savePresetGrids();
@@ -1027,7 +1157,7 @@
                 steps.appendChild(c);
                 cellEls[r.key].push(c);
             }
-            row.appendChild(name); row.appendChild(slen); row.appendChild(steps);
+            row.appendChild(name); row.appendChild(steps);
             gridEl.appendChild(row);
         });
         // beat numbers (built for MAX_STEPS; dimmed beyond the active length)
@@ -1040,17 +1170,35 @@
         }
     }
 
-    // apply the visual state class to a cell. The cell's value IS its hit count,
-    // and its probability dims it proportionally.
-    function paintCell(c, state, chance) {
+    // Paint a cell. The label shown depends on the active mode, so whatever you're
+    // editing is always readable on the grid:
+    //   CHANCE mode → shows the fire percentage
+    //   VEL mode    → shows the velocity percentage
+    //   otherwise   → shows the ratchet count (for rolls)
+    function paintCell(c, state, chance, vel) {
+        const p = (chance === undefined) ? 100 : chance;
+        const v = (vel === undefined) ? 100 : vel;
         c.classList.toggle('on', !!state);
         c.classList.toggle('ratchet', state > 1);
-        c.textContent = state > 1 ? state : '';
-        const p = (chance === undefined) ? 100 : chance;
+
+        let label = '';
+        if (state) {
+            if (chanceMode)      label = (p < 100) ? p : '';
+            else if (velMode)    label = (v < 100) ? v : '';
+            else if (state > 1)  label = state;
+        }
+        c.textContent = label;
+        c.classList.toggle('tiny', String(label).length > 1);
+
+        // dim by probability so low-odds steps read as "maybe"
         c.classList.toggle('chance75', p === 75);
         c.classList.toggle('chance50', p === 50);
         c.classList.toggle('chance25', p === 25);
         c.classList.toggle('hasChance', p < 100 && !!state);
+        // velocity shows as height of the fill
+        c.classList.toggle('vel75', !!state && v === 75);
+        c.classList.toggle('vel50', !!state && v === 50);
+        c.classList.toggle('vel30', !!state && v === 30);
     }
 
     function renderCells() {
@@ -1059,7 +1207,8 @@
                 const c = cellEls[r.key][i];
                 const active = i < STEPS;
                 paintCell(c, active ? grid[r.key][i] : 0,
-                             active && probs[r.key] ? probs[r.key][i] : 100);
+                             active && probs[r.key] ? probs[r.key][i] : 100,
+                             active && vels[r.key] ? vels[r.key][i] : 100);
                 c.classList.toggle('disabled', i >= STEPS);   // beyond the loop length
             }
         });
@@ -1128,7 +1277,15 @@
 
             // humanize: timing drift (up to ~18ms) and velocity drift
             const tJit = humanize ? (Math.random() - 0.5) * 0.036 * humanize : 0;
-            const vJit = () => humanize ? 1 - Math.random() * 0.45 * humanize : 1;
+            // per-step velocity, plus optional random variation on top
+            const stepVel = ((vels[r.key] && vels[r.key][step] !== undefined)
+                            ? vels[r.key][step] : 100) / 100;
+            const vJit = () => {
+                let v = stepVel;
+                if (velRandom) v *= 1 - Math.random() * 0.7 * velRandom;
+                if (humanize)  v *= 1 - Math.random() * 0.45 * humanize;
+                return Math.max(0.05, v);
+            };
 
             if (n === 1) { trigger(r.key, Math.max(0, time + tJit), vJit()); return; }
             const sub = stepDur / n;
@@ -1237,7 +1394,7 @@
         if (audioCtx) { syncDelayTime(); applyFx(); }
     });
     document.getElementById('clearBtn').addEventListener('click', () => {
-        grid = emptyGrid(); probs = fullProbs(); renderCells();
+        grid = emptyGrid(); probs = fullProbs(); vels = fullVels(); renderCells();
         document.getElementById('curName').textContent = 'Blank';
         currentPreset = -1; cuedPreset = null; renderPresets();
         document.getElementById('cueNote').textContent = '';
@@ -1281,17 +1438,20 @@
     }
     function snapshot() {
         // full state of a setup
-        const pat = {}, pch = {};
+        const pat = {}, pch = {}, pvl = {};
         ROWS.forEach(r => {
             pat[r.key] = grid[r.key].slice();
             pch[r.key] = (probs[r.key] || []).slice();
+            pvl[r.key] = (vels[r.key] || []).slice();
         });
-        return { name: '', bpm, steps: STEPS, pattern: pat, chance: pch, humanize,
-                 eq: { ...eqGains }, fx: { ...fx }, fxPreset: activeFxPreset, shortLen: { ...shortLen } };
+        return { name: '', bpm, steps: STEPS, pattern: pat, chance: pch, velocity: pvl,
+                 humanize, velRandom,
+                 eq: { ...eqGains }, fx: { ...fx }, fxPreset: activeFxPreset, shortLen: { ...shortLen }, sampVol: { ...sampVol }, fadeIn: { ...fadeIn }, fadeOut: { ...fadeOut } };
     }
     function applySetup(s) {
         grid = emptyGrid();
         probs = fullProbs();
+        vels = fullVels();
         for (const key in s.pattern) {
             if (grid[key]) {
                 const arr = s.pattern[key].slice(0, MAX_STEPS);
@@ -1305,6 +1465,18 @@
                 while (arr.length < MAX_STEPS) arr.push(100);
                 probs[key] = arr;
             }
+        }
+        if (s.velocity) for (const key in s.velocity) {
+            if (vels[key]) {
+                const arr = s.velocity[key].slice(0, MAX_STEPS);
+                while (arr.length < MAX_STEPS) arr.push(100);
+                vels[key] = arr;
+            }
+        }
+        if (typeof s.velRandom === 'number') {
+            velRandom = s.velRandom;
+            document.getElementById('velRandom').value = Math.round(velRandom * 100);
+            document.getElementById('velRandomVal').textContent = Math.round(velRandom * 100);
         }
         if (typeof s.humanize === 'number') {
             humanize = s.humanize;
@@ -1342,20 +1514,18 @@
             refreshFxUI(); renderFxPresets();
         }
         // restore per-sound short lengths and update the row sliders
+        ['sampVol','fadeIn','fadeOut'].forEach(k => {
+            const target = { sampVol, fadeIn, fadeOut }[k];
+            if (s[k]) ROWS.forEach(r => { if (typeof s[k][r.key] === 'number') target[r.key] = s[k][r.key]; });
+        });
         if (s.shortLen) {
             ROWS.forEach(r => { if (typeof s.shortLen[r.key] === 'number') shortLen[r.key] = s.shortLen[r.key]; });
             saveShortLen(); refreshShortLenUI();
         }
     }
-    // refresh the per-row short-length sliders from the shortLen state
+    // refresh the single Length slider for the currently selected row
     function refreshShortLenUI() {
-        document.querySelectorAll('.row').forEach((row, idx) => {
-            const r = ROWS[idx]; if (!r) return;
-            const inp = row.querySelector('.slen input');
-            const pct = row.querySelector('.slen .pct');
-            if (inp) inp.value = Math.round(shortLen[r.key] * 100);
-            if (pct) pct.textContent = Math.round(shortLen[r.key] * 100) + '%';
-        });
+        if (typeof selectRow === 'function' && selectedRow) selectRow(selectedRow);
     }
     function renderSetups() {
         const list = document.getElementById('setupList');
@@ -1519,25 +1689,164 @@
     }
     document.getElementById('midiEnable').addEventListener('click', enableMidi);
 
-    /* ================= ROLL / CHANCE MODES + HUMANIZE ================= */
-    function setModes(roll, chance) {
-        rollMode = roll; chanceMode = chance;
+    /* ============ ROLL / CHANCE / VEL MODES + HUMANIZE + LENGTH ============ */
+    function setModes(roll, chance, vel) {
+        rollMode = roll; chanceMode = chance; velMode = vel;
         document.getElementById('rollMode').classList.toggle('on', rollMode);
         document.getElementById('chanceMode').classList.toggle('on', chanceMode);
+        document.getElementById('velMode').classList.toggle('on', velMode);
         const g = document.getElementById('grid');
         g.classList.toggle('rollmode', rollMode);
         g.classList.toggle('chancemode', chanceMode);
+        g.classList.toggle('velmode', velMode);
+        renderCells();   // labels on the cells change with the mode
     }
-    document.getElementById('rollMode').addEventListener('click', () => {
-        setModes(!rollMode, false);        // modes are mutually exclusive
-    });
-    document.getElementById('chanceMode').addEventListener('click', () => {
-        setModes(false, !chanceMode);
-    });
+    document.getElementById('rollMode').addEventListener('click', () =>
+        setModes(!rollMode, false, false));          // modes are mutually exclusive
+    document.getElementById('chanceMode').addEventListener('click', () =>
+        setModes(false, !chanceMode, false));
+    document.getElementById('velMode').addEventListener('click', () =>
+        setModes(false, false, !velMode));
+
     document.getElementById('humanize').addEventListener('input', e => {
         humanize = parseInt(e.target.value) / 100;
         document.getElementById('humanizeVal').textContent = e.target.value;
     });
+    document.getElementById('velRandom').addEventListener('input', e => {
+        velRandom = parseInt(e.target.value) / 100;
+        document.getElementById('velRandomVal').textContent = e.target.value;
+    });
+
+    // ---- sample editor: pick a row, then edit length / volume / fades ----
+    let selectedRow = 'kick';
+
+    // Draw the selected sample's waveform with the played region, fades and
+    // volume drawn on top, so the settings are visible rather than abstract.
+    function drawWave() {
+        const cv = document.getElementById('waveCanvas');
+        if (!cv) return;
+        const dpr = window.devicePixelRatio || 1;
+        const w = cv.clientWidth, h = cv.clientHeight;
+        cv.width = w * dpr; cv.height = h * dpr;
+        const ctx = cv.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, w, h);
+
+        const key = selectedRow;
+        const buf = wavBuffers[key];
+        const mid = h / 2;
+
+        // playing region (as a fraction of the whole file)
+        const lenFrac = shortLen[key];
+        const playW = Math.max(2, w * lenFrac);
+
+        // background: the un-played remainder
+        ctx.fillStyle = '#101010';
+        ctx.fillRect(0, 0, w, h);
+
+        if (buf) {
+            // peak-per-column waveform
+            const data = buf.getChannelData(0);
+            const step = Math.max(1, Math.floor(data.length / w));
+            ctx.strokeStyle = '#3a3a3a';
+            ctx.beginPath();
+            for (let x = 0; x < w; x++) {
+                let lo = 1, hi = -1;
+                const start = x * step;
+                for (let j = 0; j < step; j++) {
+                    const v = data[start + j];
+                    if (v === undefined) break;
+                    if (v < lo) lo = v; if (v > hi) hi = v;
+                }
+                ctx.moveTo(x + .5, mid - hi * mid * 0.92);
+                ctx.lineTo(x + .5, mid - lo * mid * 0.92);
+            }
+            ctx.stroke();
+
+            // the portion that actually plays, drawn in the accent colour and
+            // scaled vertically by the sample's volume trim
+            const vol = Math.min(1.5, sampVol[key]);
+            ctx.strokeStyle = '#e53935';
+            ctx.beginPath();
+            for (let x = 0; x < playW; x++) {
+                let lo = 1, hi = -1;
+                const start = x * step;
+                for (let j = 0; j < step; j++) {
+                    const v = data[start + j];
+                    if (v === undefined) break;
+                    if (v < lo) lo = v; if (v > hi) hi = v;
+                }
+                // apply the fade envelope to the drawn amplitude
+                const t = x / playW;
+                let env = 1;
+                const fi = fadeIn[key], fo = fadeOut[key];
+                if (fi > 0 && t < fi) env = t / fi;
+                if (fo > 0 && t > 1 - fo) env = Math.min(env, (1 - t) / fo);
+                const a = mid * 0.92 * vol * env;
+                ctx.moveTo(x + .5, mid - hi * a);
+                ctx.lineTo(x + .5, mid - lo * a);
+            }
+            ctx.stroke();
+        } else {
+            ctx.fillStyle = '#2a2a2a';
+            ctx.fillRect(0, mid - 1, playW, 2);
+            ctx.fillStyle = '#666';
+            ctx.font = '11px sans-serif';
+            ctx.fillText('no sample loaded — synth voice', 10, mid - 10);
+        }
+
+        // length marker
+        ctx.fillStyle = 'rgba(229,57,53,.10)';
+        ctx.fillRect(0, 0, playW, h);
+        ctx.strokeStyle = '#e53935';
+        ctx.beginPath(); ctx.moveTo(playW, 0); ctx.lineTo(playW, h); ctx.stroke();
+
+        // fade guide lines
+        ctx.strokeStyle = 'rgba(255,255,255,.45)';
+        ctx.setLineDash([3, 3]);
+        const fiX = playW * (fadeIn[key] || 0);
+        const foX = playW * (1 - (fadeOut[key] || 0));
+        if (fiX > 1) { ctx.beginPath(); ctx.moveTo(0, h - 2); ctx.lineTo(fiX, 2); ctx.stroke(); }
+        if (fadeOut[key] > 0) { ctx.beginPath(); ctx.moveTo(foX, 2); ctx.lineTo(playW, h - 2); ctx.stroke(); }
+        ctx.setLineDash([]);
+    }
+
+    function selectRow(key) {
+        selectedRow = key;
+        document.querySelectorAll('.row .name').forEach(n =>
+            n.classList.toggle('sel', n.dataset.key === key));
+        const row = ROWS.find(r => r.key === key);
+        document.getElementById('sampName').textContent = row ? row.name : key;
+        const setv = (id, val) => {
+            document.getElementById(id).value = val;
+            document.getElementById(id.replace('Slider', 'Val')).textContent = val;
+        };
+        setv('lenSlider', Math.round(shortLen[key] * 100));
+        setv('volSlider', Math.round(sampVol[key] * 100));
+        setv('fiSlider',  Math.round(fadeIn[key] * 100));
+        setv('foSlider',  Math.round(fadeOut[key] * 100));
+        drawWave();
+    }
+
+    function sampCtl(id, apply) {
+        document.getElementById(id).addEventListener('input', e => {
+            const v = parseInt(e.target.value);
+            apply(v / 100);
+            document.getElementById(id.replace('Slider', 'Val')).textContent = v;
+            saveShortLen(); drawWave();
+        });
+    }
+    sampCtl('lenSlider', v => shortLen[selectedRow] = v);
+    sampCtl('volSlider', v => sampVol[selectedRow]  = v);
+    sampCtl('fiSlider',  v => fadeIn[selectedRow]   = v);
+    sampCtl('foSlider',  v => fadeOut[selectedRow]  = v);
+
+    // audition the selected sound with its current settings
+    document.getElementById('sampAudition').addEventListener('click', async () => {
+        await initAudio();
+        trigger(selectedRow, audioCtx.currentTime + 0.02);
+    });
+    window.addEventListener('resize', drawWave);
 
     /* ================= STEP COUNT (per preset) ================= */
     // A rough time-signature hint so 12 reads as 3/4, 16 as 4/4, etc.
@@ -1674,6 +1983,7 @@
     renderLearn();
     renderFxPresets();
     refreshFxUI();
+    selectRow('kick');
 
     // reset all four presets back to their factory patterns
     document.getElementById('resetPresets').addEventListener('click', () => {
