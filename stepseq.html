@@ -357,6 +357,27 @@
         font-variant-numeric: tabular-nums; width: 34px; text-align: right;
     }
     .samp-hint { font-size: 11px; color: #555; margin-top: 8px; }
+
+    /* sample / synth source toggle */
+    .src-toggle { display: flex; gap: 8px; margin-bottom: 12px; }
+    .src-btn {
+        flex: 1; background: var(--pad-bg); border: 1px solid #444; color: var(--text-color);
+        border-radius: 8px; padding: 9px; font-size: 11px; font-weight: bold;
+        letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
+    }
+    .src-btn.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .src-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+    .synth-sel {
+        flex: 1; background: #1a1a1a; border: 1px solid #444; color: #ccc;
+        border-radius: 8px; padding: 8px 10px; font-size: 13px; outline: none;
+    }
+    .synth-sel:focus { border-color: var(--accent); }
+
+    .row-mgmt { display: flex; gap: 8px; margin-top: 14px; }
+    .row-mgmt .mini-btn { flex: 1; }
+    /* custom synth rows get a marker in the grid */
+    .row .name.custom::before { content: '~ '; color: var(--accent); }
 </style>
 </head>
 <body>
@@ -415,29 +436,109 @@
 
     <div class="panel" id="samplePanel">
         <div class="panel-title">
-            Sample: <span id="sampName" class="samp-name">Kick</span>
+            Sound: <span id="sampName" class="samp-name">Kick</span>
             <button class="mini-btn" id="sampAudition" style="margin-left:auto; padding:4px 10px;">▶ Test</button>
         </div>
-        <canvas id="waveCanvas" class="wave"></canvas>
-        <div class="samp-ctl">
-            <label>Length</label>
-            <input type="range" id="lenSlider" min="5" max="100" value="18">
-            <span class="val" id="lenVal">18</span>
+
+        <div class="src-toggle">
+            <button class="src-btn" id="srcSample" data-src="sample">Sample</button>
+            <button class="src-btn" id="srcSynth"  data-src="synth">Synth</button>
         </div>
-        <div class="samp-ctl">
-            <label>Volume</label>
-            <input type="range" id="volSlider" min="0" max="150" value="100">
-            <span class="val" id="volVal">100</span>
+
+        <!-- SAMPLE controls -->
+        <div id="sampleCtls">
+            <canvas id="waveCanvas" class="wave"></canvas>
+            <div class="samp-ctl">
+                <label>Length</label>
+                <input type="range" id="lenSlider" min="5" max="100" value="18">
+                <span class="val" id="lenVal">18</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Volume</label>
+                <input type="range" id="volSlider" min="0" max="150" value="100">
+                <span class="val" id="volVal">100</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Fade in</label>
+                <input type="range" id="fiSlider" min="0" max="90" value="0">
+                <span class="val" id="fiVal">0</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Fade out</label>
+                <input type="range" id="foSlider" min="0" max="90" value="25">
+                <span class="val" id="foVal">25</span>
+            </div>
         </div>
-        <div class="samp-ctl">
-            <label>Fade in</label>
-            <input type="range" id="fiSlider" min="0" max="90" value="0">
-            <span class="val" id="fiVal">0</span>
+
+        <!-- SYNTH controls -->
+        <div id="synthCtls" style="display:none;">
+            <div class="samp-ctl">
+                <label>Voice</label>
+                <select id="synthType" class="synth-sel">
+                    <option value="kick">Kick</option>
+                    <option value="sub">Sub</option>
+                    <option value="tom">Tom</option>
+                    <option value="snare">Snare</option>
+                    <option value="clap">Clap</option>
+                    <option value="hat">Hat</option>
+                    <option value="cymbal">Cymbal</option>
+                    <option value="zap">Zap</option>
+                </select>
+            </div>
+            <div class="samp-ctl">
+                <label>Pitch</label>
+                <input type="range" id="spPitch" min="30" max="1200" value="110">
+                <span class="val" id="spPitchVal">110</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Sweep</label>
+                <input type="range" id="spPitchEnv" min="0" max="100" value="85">
+                <span class="val" id="spPitchEnvVal">85</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Decay</label>
+                <input type="range" id="spDecay" min="2" max="150" value="32">
+                <span class="val" id="spDecayVal">32</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Tone</label>
+                <input type="range" id="spTone" min="0" max="100" value="15">
+                <span class="val" id="spToneVal">15</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Noise</label>
+                <input type="range" id="spNoise" min="0" max="100" value="0">
+                <span class="val" id="spNoiseVal">0</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Body</label>
+                <input type="range" id="spOsc" min="0" max="100" value="100">
+                <span class="val" id="spOscVal">100</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Click</label>
+                <input type="range" id="spClick" min="0" max="100" value="15">
+                <span class="val" id="spClickVal">15</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Wave</label>
+                <select id="spWave" class="synth-sel">
+                    <option value="sine">Sine</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="square">Square</option>
+                    <option value="sawtooth">Saw</option>
+                </select>
+            </div>
+            <div class="samp-ctl">
+                <label>Volume</label>
+                <input type="range" id="synVol" min="0" max="150" value="100">
+                <span class="val" id="synVolVal">100</span>
+            </div>
         </div>
-        <div class="samp-ctl">
-            <label>Fade out</label>
-            <input type="range" id="foSlider" min="0" max="90" value="25">
-            <span class="val" id="foVal">25</span>
+
+        <div class="row-mgmt">
+            <button class="mini-btn" id="addRow">+ Add synth row</button>
+            <button class="mini-btn" id="removeRow">Remove this row</button>
         </div>
         <div class="samp-hint">Tap a row name in the grid to edit that sound.</div>
     </div>
@@ -568,7 +669,8 @@
     let velRandom = 0;            // 0..1 amount of random velocity variation
 
     // Instrument rows, top → bottom. `key` maps to the sample/synth voice.
-    const ROWS = [
+    // ROWS is mutable: user-added rows are synth-only and appended here.
+    let ROWS = [
         { key: 'crash',        name: 'Crash' },
         { key: 'ride',         name: 'Ride' },
         { key: 'hihat_open',   name: 'Open HH' },
@@ -577,6 +679,72 @@
         { key: 'snare_ghost',  name: 'Ghost' },
         { key: 'kick',         name: 'Kick' },
     ];
+
+    /* ================= DRUM SYNTH =================
+       One flexible engine covers most drum sounds:
+         OSC   — a tuned oscillator with a pitch envelope (the "body"/thump)
+         NOISE — filtered noise (the "snap"/"sizzle")
+         AMP   — a decay envelope shaping the whole hit
+       Voice TYPES below are just starting points for those parameters; every
+       knob stays editable afterwards.
+    */
+    const SYNTH_TYPES = {
+        kick:  { osc:1.0, noise:0.0, pitch:110, pitchEnv:0.85, decay:0.32, tone:0.15, wave:'sine',     click:0.15 },
+        tom:   { osc:1.0, noise:0.06,pitch:180, pitchEnv:0.55, decay:0.40, tone:0.30, wave:'sine',     click:0.10 },
+        snare: { osc:0.45,noise:0.85,pitch:190, pitchEnv:0.40, decay:0.22, tone:0.55, wave:'triangle', click:0.20 },
+        clap:  { osc:0.0, noise:1.0, pitch:400, pitchEnv:0.0,  decay:0.26, tone:0.60, wave:'sine',     click:0.0  },
+        hat:   { osc:0.0, noise:1.0, pitch:800, pitchEnv:0.0,  decay:0.07, tone:0.92, wave:'square',   click:0.0  },
+        cymbal:{ osc:0.12,noise:1.0, pitch:600, pitchEnv:0.0,  decay:0.90, tone:0.80, wave:'square',   click:0.0  },
+        zap:   { osc:1.0, noise:0.0, pitch:900, pitchEnv:0.95, decay:0.18, tone:0.45, wave:'sawtooth', click:0.0  },
+        sub:   { osc:1.0, noise:0.0, pitch:55,  pitchEnv:0.25, decay:0.60, tone:0.05, wave:'sine',     click:0.0  },
+    };
+
+    // Per-row: which source to use, and the synth parameters for that row.
+    const SRC_KEY = 'sixteen_synth_v1';
+    const rowSource = {};   // key -> 'sample' | 'synth'
+    const synthP    = {};   // key -> { type, ...params }
+
+    function defaultSynthFor(key) {
+        // guess a sensible voice type from the row name
+        const guess = key.includes('kick') ? 'kick'
+                    : key.includes('snare') ? 'snare'
+                    : key.includes('hihat') ? 'hat'
+                    : (key.includes('crash') || key.includes('ride')) ? 'cymbal'
+                    : 'tom';
+        return { type: guess, ...SYNTH_TYPES[guess] };
+    }
+
+    const ROWS_KEY = 'sixteen_rows_v1';
+    // Restore user-added rows and per-row source/synth settings.
+    (function loadRowConfig() {
+        let saved = null;
+        try { saved = JSON.parse(localStorage.getItem(SRC_KEY)); } catch (e) {}
+        let savedRows = null;
+        try { savedRows = JSON.parse(localStorage.getItem(ROWS_KEY)); } catch (e) {}
+        if (Array.isArray(savedRows) && savedRows.length) {
+            // keep only well-formed entries; custom rows carry synthOnly:true
+            const clean = savedRows.filter(r => r && r.key && r.name);
+            if (clean.length) ROWS = clean;
+        }
+        ROWS.forEach(r => {
+            rowSource[r.key] = r.synthOnly ? 'synth' : 'sample';
+            synthP[r.key] = defaultSynthFor(r.key);
+        });
+        if (saved) {
+            if (saved.src) for (const k in saved.src)
+                if (rowSource[k] !== undefined) rowSource[k] = saved.src[k];
+            if (saved.p) for (const k in saved.p)
+                if (synthP[k]) synthP[k] = { ...synthP[k], ...saved.p[k] };
+            // custom rows are always synth
+            ROWS.forEach(r => { if (r.synthOnly) rowSource[r.key] = 'synth'; });
+        }
+    })();
+    function saveRowConfig() {
+        try {
+            localStorage.setItem(SRC_KEY, JSON.stringify({ src: rowSource, p: synthP }));
+            localStorage.setItem(ROWS_KEY, JSON.stringify(ROWS));
+        } catch (e) {}
+    }
 
     // ---- Presets. Each is { name, steps, pattern: { rowKey: [counts] } } ----
     // In a pattern string: '.' = off, 'x' = single hit, and a DIGIT (2-8) = a
@@ -898,60 +1066,77 @@
     }
 
     // Synth fallback voices (mirrors the groove app so it sounds the same w/o wavs)
+    // Parameterized drum synth. Builds every voice from the same three parts:
+    // a pitch-swept oscillator, a filtered noise layer, and an amp envelope.
     function playSynth(key, vol, time, short) {
-        const sf = short ? Math.max(0.12, shortLen[key]) : 1;  // decay scale for short hits
+        const p = synthP[key] || defaultSynthFor(key);
+        const sf = short ? Math.max(0.15, shortLen[key]) : 1;   // length knob scales decay
         vol = Math.min(1.6, vol * (sampVol[key] === undefined ? 1 : sampVol[key]));
+
+        const dur = Math.max(0.02, p.decay * sf);
         const g = audioCtx.createGain();
-        g.gain.setValueAtTime(vol, time);
+        g.gain.setValueAtTime(0.0001, time);
+        g.gain.linearRampToValueAtTime(vol, time + 0.002);       // fast attack, no click
+        g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
         g.connect(out());
-        if (key === 'kick') {
-            const dur = 0.2 * sf;
+
+        // ---- oscillator layer (body / thump / tone) ----
+        if (p.osc > 0.001) {
             const o = audioCtx.createOscillator();
-            o.type = 'sine';
-            o.frequency.setValueAtTime(250, time);
-            o.frequency.exponentialRampToValueAtTime(0.001, time + dur);
-            g.gain.exponentialRampToValueAtTime(0.001, time + dur);
-            o.connect(g); o.start(time); o.stop(time + dur);
+            const og = audioCtx.createGain();
+            og.gain.value = p.osc;
+            o.type = p.wave || 'sine';
+            const f0 = p.pitch;
+            // pitch envelope: sweeps down from a multiple of the base pitch.
+            // This is what makes a kick "thump" and a zap "pew".
+            const top = f0 * (1 + p.pitchEnv * 6);
+            o.frequency.setValueAtTime(top, time);
+            o.frequency.exponentialRampToValueAtTime(
+                Math.max(20, f0), time + Math.max(0.01, dur * (0.15 + p.pitchEnv * 0.5)));
+            o.connect(og); og.connect(g);
+            o.start(time); o.stop(time + dur + 0.02);
             trackSource(o);
-        } else if (key === 'snare' || key === 'snare_ghost') {
-            const dur = 0.25 * sf;
-            const o = audioCtx.createOscillator();
-            o.type = 'triangle'; o.frequency.setValueAtTime(200, time);
-            const noise = audioCtx.createBufferSource();
-            const b = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.25, audioCtx.sampleRate);
+        }
+
+        // ---- noise layer (snap / sizzle) ----
+        if (p.noise > 0.001) {
+            const nb = audioCtx.createBufferSource();
+            const len = Math.max(1, Math.floor(audioCtx.sampleRate * (dur + 0.02)));
+            const b = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
             const d = b.getChannelData(0);
-            for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-            noise.buffer = b;
-            const f = audioCtx.createBiquadFilter();
-            f.type = 'highpass'; f.frequency.value = 1000;
-            noise.connect(f); f.connect(g); o.connect(g);
-            g.gain.exponentialRampToValueAtTime(0.001, time + dur);
-            o.start(time); noise.start(time); o.stop(time + dur);
-            trackSource(o); trackSource(noise);
-        } else {
-            // cymbals / hats / ride
-            const isCrash = key === 'crash';
-            const isRide  = key === 'ride';
-            const isOpen = key === 'hihat_open';
-            const baseDur = isCrash ? 1.5 : (isRide ? 0.9 : (isOpen ? 0.4 : 0.08));
-            const dur = baseDur * sf;
-            const noise = audioCtx.createBufferSource();
-            const b = audioCtx.createBuffer(1, audioCtx.sampleRate * baseDur, audioCtx.sampleRate);
-            const d = b.getChannelData(0);
-            for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-            noise.buffer = b;
-            const f = audioCtx.createBiquadFilter();
-            if (isRide) {
-                // softer, more focused than a crash: bandpass gives a pingier, gentler tone
-                f.type = 'bandpass'; f.frequency.value = 3200; f.Q.value = 0.9;
-                g.gain.setValueAtTime(vol * 0.5, time);   // ride sits back in the mix
+            for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+            nb.buffer = b;
+            const nf = audioCtx.createBiquadFilter();
+            // `tone` sweeps the noise from dark/bandpassed to bright/highpassed
+            if (p.tone > 0.5) {
+                nf.type = 'highpass';
+                nf.frequency.value = 200 * Math.pow(60, (p.tone - 0.5) * 2);  // ~200Hz..12kHz
             } else {
-                f.type = 'highpass'; f.frequency.value = isCrash ? 4000 : (isOpen ? 5000 : 7000);
+                nf.type = 'bandpass';
+                nf.frequency.value = 200 + p.tone * 4000;
+                nf.Q.value = 0.8;
             }
-            noise.connect(f); f.connect(g);
-            g.gain.exponentialRampToValueAtTime(0.001, time + dur);
-            noise.start(time); noise.stop(time + dur + 0.01);
-            trackSource(noise);
+            const ng = audioCtx.createGain();
+            ng.gain.value = p.noise;
+            nb.connect(nf); nf.connect(ng); ng.connect(g);
+            nb.start(time); nb.stop(time + dur + 0.02);
+            trackSource(nb);
+        }
+
+        // ---- click transient (attack definition) ----
+        if (p.click > 0.001) {
+            const cl = audioCtx.createBufferSource();
+            const clen = Math.max(1, Math.floor(audioCtx.sampleRate * 0.012));
+            const cb = audioCtx.createBuffer(1, clen, audioCtx.sampleRate);
+            const cd = cb.getChannelData(0);
+            for (let i = 0; i < clen; i++) cd[i] = (Math.random() * 2 - 1) * (1 - i / clen);
+            cl.buffer = cb;
+            const cg = audioCtx.createGain(); cg.gain.value = p.click * vol * 1.2;
+            const chp = audioCtx.createBiquadFilter();
+            chp.type = 'highpass'; chp.frequency.value = 1200;
+            cl.connect(chp); chp.connect(cg); cg.connect(out());
+            cl.start(time);
+            trackSource(cl);
         }
     }
 
@@ -960,6 +1145,8 @@
     function trigger(key, time, gainMul) {
         const base = key === 'snare_ghost' ? 0.32 : (key === 'ride' ? 0.6 : 0.9);
         const vol = base * (gainMul === undefined ? 1 : gainMul);
+        // a row plays its sample OR the synth, depending on its source setting
+        if (rowSource[key] === 'synth') { playSynth(key, vol, time, true); return; }
         if (!playWav(key, vol, time, true)) playSynth(key, vol, time, true);
     }
 
@@ -1029,10 +1216,12 @@
         const savedSteps = saved && saved.steps;
         presetGrids = PRESETS.map((_, idx) => {
             const s = savedGrids && savedGrids[idx];
-            if (s && ROWS.every(r => Array.isArray(s[r.key]))) {
+            if (s && typeof s === 'object') {
                 const g = emptyGrid();
                 ROWS.forEach(r => {
-                    const arr = s[r.key].slice(0, MAX_STEPS);
+                    // a row added after this preset was saved just gets an empty lane
+                    const src = Array.isArray(s[r.key]) ? s[r.key] : [];
+                    const arr = src.slice(0, MAX_STEPS);
                     while (arr.length < MAX_STEPS) arr.push(0);
                     g[r.key] = arr;
                 });
@@ -1042,10 +1231,10 @@
         });
         presetProbs = PRESETS.map((_, idx) => {
             const s = savedProbs && savedProbs[idx];
-            if (s && ROWS.every(r => Array.isArray(s[r.key]))) {
+            if (s && typeof s === 'object') {
                 const p = fullProbs();
                 ROWS.forEach(r => {
-                    const arr = s[r.key].slice(0, MAX_STEPS);
+                    const arr = (Array.isArray(s[r.key]) ? s[r.key] : []).slice(0, MAX_STEPS);
                     while (arr.length < MAX_STEPS) arr.push(100);
                     p[r.key] = arr;
                 });
@@ -1055,10 +1244,10 @@
         });
         presetVels = PRESETS.map((_, idx) => {
             const s = saved && saved.vels && saved.vels[idx];
-            if (s && ROWS.every(r => Array.isArray(s[r.key]))) {
+            if (s && typeof s === 'object') {
                 const v = fullVels();
                 ROWS.forEach(r => {
-                    const arr = s[r.key].slice(0, MAX_STEPS);
+                    const arr = (Array.isArray(s[r.key]) ? s[r.key] : []).slice(0, MAX_STEPS);
                     while (arr.length < MAX_STEPS) arr.push(100);
                     v[r.key] = arr;
                 });
@@ -1109,7 +1298,8 @@
             const row = document.createElement('div');
             row.className = 'row';
             const name = document.createElement('div');
-            name.className = 'name'; name.textContent = r.name;
+            name.className = 'name' + (r.synthOnly ? ' custom' : '');
+            name.textContent = r.name;
             // clicking the row name selects that sound for the big Length slider
             name.addEventListener('click', () => selectRow(r.key));
             name.dataset.key = r.key;
@@ -1817,14 +2007,41 @@
             n.classList.toggle('sel', n.dataset.key === key));
         const row = ROWS.find(r => r.key === key);
         document.getElementById('sampName').textContent = row ? row.name : key;
+
+        // source toggle state — custom rows are synth-only
+        const isCustom = !!(row && row.synthOnly);
+        const src = rowSource[key] || 'sample';
+        document.getElementById('srcSample').classList.toggle('on', src === 'sample');
+        document.getElementById('srcSynth').classList.toggle('on', src === 'synth');
+        document.getElementById('srcSample').disabled = isCustom;
+        document.getElementById('sampleCtls').style.display = src === 'sample' ? '' : 'none';
+        document.getElementById('synthCtls').style.display  = src === 'synth'  ? '' : 'none';
+        document.getElementById('removeRow').disabled = !isCustom;
+
         const setv = (id, val) => {
-            document.getElementById(id).value = val;
-            document.getElementById(id.replace('Slider', 'Val')).textContent = val;
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.value = val;
+            const lab = document.getElementById(id + 'Val') || document.getElementById(id.replace('Slider', 'Val'));
+            if (lab) lab.textContent = val;
         };
+        // sample controls
         setv('lenSlider', Math.round(shortLen[key] * 100));
         setv('volSlider', Math.round(sampVol[key] * 100));
         setv('fiSlider',  Math.round(fadeIn[key] * 100));
         setv('foSlider',  Math.round(fadeOut[key] * 100));
+        // synth controls
+        const p = synthP[key] || (synthP[key] = defaultSynthFor(key));
+        document.getElementById('synthType').value = p.type;
+        document.getElementById('spWave').value = p.wave;
+        setv('spPitch',    Math.round(p.pitch));
+        setv('spPitchEnv', Math.round(p.pitchEnv * 100));
+        setv('spDecay',    Math.round(p.decay * 100));
+        setv('spTone',     Math.round(p.tone * 100));
+        setv('spNoise',    Math.round(p.noise * 100));
+        setv('spOsc',      Math.round(p.osc * 100));
+        setv('spClick',    Math.round(p.click * 100));
+        setv('synVol',     Math.round(sampVol[key] * 100));
         drawWave();
     }
 
@@ -1847,6 +2064,100 @@
         trigger(selectedRow, audioCtx.currentTime + 0.02);
     });
     window.addEventListener('resize', drawWave);
+
+    /* ---------------- source toggle: sample vs synth ---------------- */
+    document.querySelectorAll('.src-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const row = ROWS.find(r => r.key === selectedRow);
+            if (row && row.synthOnly && btn.dataset.src === 'sample') return;  // not allowed
+            rowSource[selectedRow] = btn.dataset.src;
+            saveRowConfig();
+            selectRow(selectedRow);
+            await initAudio();
+            trigger(selectedRow, audioCtx.currentTime + 0.02);   // hear the change
+        });
+    });
+
+    /* ---------------- synth parameter controls ---------------- */
+    function synthCtl(id, apply, scale) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('input', e => {
+            const raw = parseInt(e.target.value);
+            apply(scale ? raw / 100 : raw);
+            const lab = document.getElementById(id + 'Val');
+            if (lab) lab.textContent = raw;
+            saveRowConfig();
+        });
+    }
+    synthCtl('spPitch',    v => synthP[selectedRow].pitch = v,    false);
+    synthCtl('spPitchEnv', v => synthP[selectedRow].pitchEnv = v, true);
+    synthCtl('spDecay',    v => synthP[selectedRow].decay = v,    true);
+    synthCtl('spTone',     v => synthP[selectedRow].tone = v,     true);
+    synthCtl('spNoise',    v => synthP[selectedRow].noise = v,    true);
+    synthCtl('spOsc',      v => synthP[selectedRow].osc = v,      true);
+    synthCtl('spClick',    v => synthP[selectedRow].click = v,    true);
+    synthCtl('synVol',     v => { sampVol[selectedRow] = v; saveShortLen(); }, true);
+    document.getElementById('spWave').addEventListener('change', e => {
+        synthP[selectedRow].wave = e.target.value; saveRowConfig();
+    });
+    // changing the voice type reloads that type's starting parameters
+    document.getElementById('synthType').addEventListener('change', async e => {
+        const t = e.target.value;
+        synthP[selectedRow] = { type: t, ...SYNTH_TYPES[t] };
+        saveRowConfig();
+        selectRow(selectedRow);
+        await initAudio();
+        trigger(selectedRow, audioCtx.currentTime + 0.02);
+    });
+
+    /* ---------------- add / remove synth rows ---------------- */
+    document.getElementById('addRow').addEventListener('click', () => {
+        const name = (prompt('Name for the new synth row:', 'Synth ' + (ROWS.length + 1)) || '').trim();
+        if (!name) return;
+        const key = 'syn_' + Date.now().toString(36);
+        ROWS.push({ key, name, synthOnly: true });
+        rowSource[key] = 'synth';
+        synthP[key] = { type: 'tom', ...SYNTH_TYPES.tom };
+        shortLen[key] = 1.0; sampVol[key] = 1.0; fadeIn[key] = 0; fadeOut[key] = 0.25;
+        // extend every preset's data with an empty lane for the new row
+        [presetGrids, presetProbs, presetVels].forEach((coll, ci) => {
+            if (!coll) return;
+            coll.forEach(obj => obj[key] = new Array(MAX_STEPS).fill(ci === 0 ? 0 : 100));
+        });
+        grid[key]  = grid[key]  || new Array(MAX_STEPS).fill(0);
+        probs[key] = probs[key] || new Array(MAX_STEPS).fill(100);
+        vels[key]  = vels[key]  || new Array(MAX_STEPS).fill(100);
+        saveRowConfig(); saveShortLen(); savePresetGrids();
+        rebuildGrid();
+        selectRow(key);
+    });
+
+    document.getElementById('removeRow').addEventListener('click', () => {
+        const row = ROWS.find(r => r.key === selectedRow);
+        if (!row || !row.synthOnly) return;          // only custom rows can go
+        if (!confirm(`Remove the "${row.name}" row? Its pattern will be lost.`)) return;
+        const key = row.key;
+        ROWS = ROWS.filter(r => r.key !== key);
+        delete rowSource[key]; delete synthP[key];
+        [presetGrids, presetProbs, presetVels].forEach(coll => {
+            if (coll) coll.forEach(obj => delete obj[key]);
+        });
+        delete grid[key]; delete probs[key]; delete vels[key];
+        saveRowConfig(); savePresetGrids();
+        rebuildGrid();
+        selectRow(ROWS[ROWS.length - 1].key);
+    });
+
+    // rebuild the grid DOM after rows are added or removed
+    function rebuildGrid() {
+        const gridEl2 = document.getElementById('grid');
+        gridEl2.innerHTML = '';
+        document.getElementById('beatNums').innerHTML = '';
+        for (const k in cellEls) delete cellEls[k];
+        buildGrid();
+        renderCells();
+    }
 
     /* ================= STEP COUNT (per preset) ================= */
     // A rough time-signature hint so 12 reads as 3/4, 16 as 4/4, etc.
