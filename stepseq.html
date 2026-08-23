@@ -560,8 +560,8 @@
         </div>
         <div class="setup-list" id="setupList"></div>
         <div class="panel-row" style="margin-top:10px;">
-            <button class="mini-btn" id="exportSetups">Export file</button>
-            <button class="mini-btn" id="importBtn">Import file</button>
+            <button class="mini-btn" id="exportSetups">Export all</button>
+            <button class="mini-btn" id="importBtn">Import all</button>
             <input type="file" id="importFile" accept="application/json" style="display:none;">
         </div>
     </div>
@@ -1531,9 +1531,15 @@
 
     async function start() {
         await initAudio();
+        // a suspended context yields a frozen currentTime — scheduling against it
+        // would silently produce nothing, which looks like a broken play button
+        if (audioCtx.state !== 'running') {
+            try { await audioCtx.resume(); } catch (e) {}
+        }
         isPlaying = true;
         currentStep = 0;
         nextNoteTime = audioCtx.currentTime + 0.06;
+        clearTimeout(timerID); timerID = null;
         scheduler();
         const btn = document.getElementById('playBtn');
         btn.textContent = '■'; btn.classList.add('playing');
@@ -1552,17 +1558,36 @@
     }
 
     // ---------- wire up ----------
-    function togglePlay() { isPlaying ? stop() : start(); }
+    async function togglePlay() {
+        // If we think we're playing but the audio engine is actually dead (the OS
+        // or browser killed it while backgrounded), treat this tap as a restart
+        // rather than a stop — otherwise the button appears to do nothing.
+        if (isPlaying && audioCtx && audioCtx.state !== 'running') {
+            try { await audioCtx.resume(); } catch (e) {}
+            if (audioCtx.state !== 'running') { isPlaying = false; }   // force a clean restart
+        }
+        if (isPlaying) stop(); else await start();
+    }
 
     // Browsers suspend the AudioContext and throttle timers when the tab is hidden.
     // On return: resume the context, and if we were playing, re-anchor the clock and
     // kick the scheduler back to life (its setTimeout loop may have been frozen).
-    function reviveAudio() {
+    async function reviveAudio() {
         if (!audioCtx) return;
         if (audioCtx.state === 'suspended') {
-            audioCtx.resume().catch(() => {});
+            try { await audioCtx.resume(); } catch (e) {}
         }
         if (isPlaying) {
+            if (audioCtx.state !== 'running') {
+                // couldn't auto-resume (mobile often requires a fresh user gesture).
+                // Reset to a stopped state so the play button works on the next tap.
+                isPlaying = false;
+                clearTimeout(timerID); timerID = null;
+                const btn = document.getElementById('playBtn');
+                btn.textContent = '▶'; btn.classList.remove('playing');
+                ROWS.forEach(r => (cellEls[r.key] || []).forEach(c => c.classList.remove('play')));
+                return;
+            }
             nextNoteTime = audioCtx.currentTime + 0.06;  // re-anchor after any drift
             clearTimeout(timerID);
             timerID = null;
@@ -1582,6 +1607,7 @@
         bpm = parseInt(e.target.value);
         document.getElementById('bpmVal').textContent = bpm;
         if (audioCtx) { syncDelayTime(); applyFx(); }
+        saveGlobal();
     });
     document.getElementById('clearBtn').addEventListener('click', () => {
         grid = emptyGrid(); probs = fullProbs(); vels = fullVels(); renderCells();
@@ -1618,6 +1644,58 @@
 
     /* ================= SETUPS: save / load / export / import ================= */
     const SETUP_KEY = 'sixteen_setups_v1';
+    const GLOBAL_KEY = 'sixteen_global_v1';
+
+    /* ---- GLOBAL settings: EQ, effects, humanize, vel-random, tempo. These are
+       app-wide (not per-preset), and are saved to browser memory automatically
+       so they survive a reload just like everything else. ---- */
+    function collectGlobal() {
+        return {
+            bpm, humanize, velRandom,
+            eq: { ...eqGains }, fx: { ...fx }, fxPreset: activeFxPreset,
+            shortLen: { ...shortLen }, sampVol: { ...sampVol },
+            fadeIn: { ...fadeIn }, fadeOut: { ...fadeOut },
+        };
+    }
+    function saveGlobal() {
+        try { localStorage.setItem(GLOBAL_KEY, JSON.stringify(collectGlobal())); } catch (e) {}
+    }
+    function applyGlobal(s, updateUI) {
+        if (!s) return;
+        if (typeof s.bpm === 'number') {
+            bpm = s.bpm;
+            const el = document.getElementById('bpm');
+            if (el) { el.value = bpm; document.getElementById('bpmVal').textContent = bpm; }
+        }
+        if (typeof s.humanize === 'number') {
+            humanize = s.humanize;
+            const el = document.getElementById('humanize');
+            if (el) { el.value = Math.round(humanize*100); document.getElementById('humanizeVal').textContent = Math.round(humanize*100); }
+        }
+        if (typeof s.velRandom === 'number') {
+            velRandom = s.velRandom;
+            const el = document.getElementById('velRandom');
+            if (el) { el.value = Math.round(velRandom*100); document.getElementById('velRandomVal').textContent = Math.round(velRandom*100); }
+        }
+        if (s.eq) { Object.assign(eqGains, s.eq); applyEq();
+            ['low','mid','high'].forEach(bd => {
+                const el = document.getElementById('eq'+cap(bd));
+                if (el) { el.value = eqGains[bd];
+                    document.getElementById('eq'+cap(bd)+'Val').textContent = (eqGains[bd]>0?'+':'')+eqGains[bd]+' dB'; }
+            });
+        }
+        if (s.fx) {
+            Object.assign(fx, s.fx);
+            activeFxPreset = (typeof s.fxPreset === 'number') ? s.fxPreset : -1;
+            if (audioCtx) applyFx();
+            if (updateUI !== false) { refreshFxUI(); renderFxPresets(); }
+        }
+        ['shortLen','sampVol','fadeIn','fadeOut'].forEach(k => {
+            const target = { shortLen, sampVol, fadeIn, fadeOut }[k];
+            if (s[k]) ROWS.forEach(r => { if (typeof s[k][r.key] === 'number') target[r.key] = s[k][r.key]; });
+        });
+    }
+
 
     function readSetups() {
         try { return JSON.parse(localStorage.getItem(SETUP_KEY)) || []; }
@@ -1751,14 +1829,31 @@
         document.getElementById('curName').textContent = name;
     });
 
+    /* ---- Export / import EVERYTHING: all four presets (patterns, chance,
+       velocity, step counts), all saved setups, the global settings (EQ,
+       effects, humanize), the per-sound sample & synth settings, the custom
+       rows, and the MIDI bindings. One file = your whole rig. ---- */
     document.getElementById('exportSetups').addEventListener('click', () => {
-        const data = JSON.stringify({ app: 'sixteen', setups: readSetups() }, null, 2);
-        const blob = new Blob([data], { type: 'application/json' });
+        const full = {
+            app: 'sixteen', version: 2, exported: new Date().toISOString(),
+            presets: {
+                grids: presetGrids, probs: presetProbs,
+                vels: presetVels, steps: presetSteps,
+            },
+            rows: ROWS,
+            rowSource, synthP,
+            global: collectGlobal(),
+            setups: readSetups(),
+            midi: midiBindings,
+        };
+        const blob = new Blob([JSON.stringify(full, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = 'sixteen-setups.json';
+        a.href = url;
+        a.download = 'sixteen-' + new Date().toISOString().slice(0, 10) + '.json';
         a.click(); URL.revokeObjectURL(url);
     });
+
     document.getElementById('importBtn').addEventListener('click', () =>
         document.getElementById('importFile').click());
     document.getElementById('importFile').addEventListener('change', e => {
@@ -1767,19 +1862,70 @@
         const reader = new FileReader();
         reader.onload = () => {
             try {
-                const parsed = JSON.parse(reader.result);
-                const incoming = Array.isArray(parsed) ? parsed : parsed.setups;
-                if (!Array.isArray(incoming)) throw new Error('bad format');
-                const arr = readSetups();
-                incoming.forEach(s => {
-                    if (s && s.pattern) {
-                        const idx = arr.findIndex(x => x.name === s.name);
-                        if (idx >= 0) arr[idx] = s; else arr.push(s);
+                const d = JSON.parse(reader.result);
+
+                // --- legacy format: a bare array or { setups: [...] } ---
+                if (Array.isArray(d) || (d.setups && !d.presets && !d.global)) {
+                    const incoming = Array.isArray(d) ? d : d.setups;
+                    const arr = readSetups();
+                    incoming.forEach(s => {
+                        if (s && s.pattern) {
+                            const i = arr.findIndex(x => x.name === s.name);
+                            if (i >= 0) arr[i] = s; else arr.push(s);
+                        }
+                    });
+                    writeSetups(arr); renderSetups();
+                    alert('Imported ' + incoming.length + ' setup(s).');
+                    e.target.value = ''; return;
+                }
+
+                // --- full rig format ---
+                if (d.rows && Array.isArray(d.rows) && d.rows.length) {
+                    ROWS = d.rows.filter(r => r && r.key && r.name);
+                }
+                if (d.rowSource) {
+                    for (const k in rowSource) delete rowSource[k];
+                    Object.assign(rowSource, d.rowSource);
+                }
+                if (d.synthP) {
+                    for (const k in synthP) delete synthP[k];
+                    Object.assign(synthP, d.synthP);
+                }
+                // make sure every row has synth params & source
+                ROWS.forEach(r => {
+                    if (!synthP[r.key]) synthP[r.key] = defaultSynthFor(r.key);
+                    if (!rowSource[r.key]) rowSource[r.key] = r.synthOnly ? 'synth' : 'sample';
+                    if (shortLen[r.key] === undefined) {
+                        shortLen[r.key] = 0.18; sampVol[r.key] = 1;
+                        fadeIn[r.key] = 0; fadeOut[r.key] = 0.25;
                     }
                 });
-                writeSetups(arr); renderSetups();
+
+                if (d.presets) {
+                    const P2 = d.presets;
+                    if (P2.grids) presetGrids = P2.grids;
+                    if (P2.probs) presetProbs = P2.probs;
+                    if (P2.vels)  presetVels  = P2.vels;
+                    if (P2.steps) presetSteps = P2.steps;
+                    // pad any missing lanes so a row added later can't break it
+                    const fix = (coll, fill) => coll && coll.forEach(obj => ROWS.forEach(r => {
+                        if (!Array.isArray(obj[r.key])) obj[r.key] = new Array(MAX_STEPS).fill(fill);
+                        while (obj[r.key].length < MAX_STEPS) obj[r.key].push(fill);
+                    }));
+                    fix(presetGrids, 0); fix(presetProbs, 100); fix(presetVels, 100);
+                }
+                if (d.global) applyGlobal(d.global);
+                if (d.setups) writeSetups(d.setups);
+                if (d.midi) { midiBindings = d.midi; writeBindings(); renderLearn(); }
+
+                saveRowConfig(); saveShortLen(); savePresetGrids(); saveGlobal();
+                rebuildGrid();
+                loadPreset(0);
+                selectRow(ROWS[ROWS.length - 1].key);
+                renderSetups();
+                alert('Imported the full rig: presets, sounds, effects and MIDI.');
             } catch (err) {
-                alert('That file could not be read as Sixteen setups.');
+                alert('That file could not be read: ' + err.message);
             }
             e.target.value = '';
         };
@@ -1901,10 +2047,12 @@
     document.getElementById('humanize').addEventListener('input', e => {
         humanize = parseInt(e.target.value) / 100;
         document.getElementById('humanizeVal').textContent = e.target.value;
+        saveGlobal();
     });
     document.getElementById('velRandom').addEventListener('input', e => {
         velRandom = parseInt(e.target.value) / 100;
         document.getElementById('velRandomVal').textContent = e.target.value;
+        saveGlobal();
     });
 
     // ---- sample editor: pick a row, then edit length / volume / fades ----
@@ -2050,7 +2198,7 @@
             const v = parseInt(e.target.value);
             apply(v / 100);
             document.getElementById(id.replace('Slider', 'Val')).textContent = v;
-            saveShortLen(); drawWave();
+            saveShortLen(); saveGlobal(); drawWave();
         });
     }
     sampCtl('lenSlider', v => shortLen[selectedRow] = v);
@@ -2239,7 +2387,7 @@
                 Object.assign(fx, p.fx);
                 activeFxPreset = idx;
                 syncDelayTime();
-                applyFx(); refreshFxUI(); renderFxPresets();
+                applyFx(); refreshFxUI(); renderFxPresets(); saveGlobal();
             });
             wrap.appendChild(b);
         });
@@ -2252,7 +2400,7 @@
             apply(parseInt(e.target.value) / 100);
             // any manual tweak means we're no longer on a named preset
             activeFxPreset = -1;
-            syncDelayTime(); applyFx(); refreshFxUI(); renderFxPresets();
+            syncDelayTime(); applyFx(); refreshFxUI(); renderFxPresets(); saveGlobal();
         });
     }
     fxSlider('fxFilterFreq', v => { fx.filterFreq = v; fx.filterOn = v < 0.995 ? 1 : 0; });
@@ -2270,6 +2418,7 @@
         eqGains[band] = db;
         applyEq();
         document.getElementById('eq' + cap(band) + 'Val').textContent = (db > 0 ? '+' : '') + db + ' dB';
+        saveGlobal();
     }
     function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
     [['eqLow','low'],['eqMid','mid'],['eqHigh','high']].forEach(([id, band]) => {
@@ -2295,6 +2444,12 @@
     renderFxPresets();
     refreshFxUI();
     selectRow('kick');
+    // restore app-wide settings (EQ, effects, humanize, tempo, per-sound params)
+    (function restoreGlobal() {
+        let g = null;
+        try { g = JSON.parse(localStorage.getItem(GLOBAL_KEY)); } catch (e) {}
+        if (g) { applyGlobal(g); selectRow(selectedRow); }
+    })();
 
     // reset all four presets back to their factory patterns
     document.getElementById('resetPresets').addEventListener('click', () => {
