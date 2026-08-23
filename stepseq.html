@@ -127,7 +127,7 @@
 
     /* ---- grid ---- */
     .beatbar { display: flex; align-items: center; margin-bottom: 6px; }
-    .beatbar .spacer { width: 62px; flex-shrink: 0; }
+    .beatbar .spacer { width: 88px; flex-shrink: 0; }
     .beatbar .nums { display: flex; flex: 1; }
     .beatbar .nums span {
         flex: 1; margin: 0 1px; text-align: center;
@@ -219,6 +219,17 @@
     .grid.velmode .step { cursor: ns-resize; }
     .grid.velmode .steps .step:not(.disabled):hover { outline: 1px solid var(--accent); }
 
+    /* per-row time-division badge */
+    .divbadge {
+        width: 20px; flex-shrink: 0; margin-right: 6px;
+        height: 18px; line-height: 18px; text-align: center;
+        font-size: 10px; font-weight: bold; color: #666;
+        background: #262626; border: 1px solid #3a3a3a; border-radius: 4px;
+        cursor: pointer; user-select: none;
+    }
+    .divbadge:hover { color: #ccc; border-color: #555; }
+    .divbadge.active { color: #fff; background: var(--accent); border-color: var(--accent); }
+
     /* clicking a row name selects it for the big Length slider */
     .row .name { cursor: pointer; user-select: none; }
     .row .name:hover { color: #ddd; }
@@ -238,7 +249,8 @@
     .foot .status .cue { color: var(--accent); }
 
     @media (max-width: 460px) {
-        .row .name, .beatbar .spacer { width: 46px; }
+        .row .name { width: 46px; }
+        .beatbar .spacer { width: 72px; }
         .step { height: 24px; }
     }
 
@@ -703,6 +715,16 @@
     const SRC_KEY = 'sixteen_synth_v1';
     const rowSource = {};   // key -> 'sample' | 'synth'
     const synthP    = {};   // key -> { type, ...params }
+    // Per-row TIME DIVISION: how much SLOWER this row runs than the main sequence.
+    // 1 = normal speed. 2 = the row takes two passes of the main loop to cross its
+    // own 16 steps (each cell lasts twice as long), 4 = four passes, etc.
+    // This stretches a row into a longer, slower pattern — great for crashes,
+    // rides and anything you want evolving over several bars.
+    const rowDiv    = {};   // key -> 1 | 2 | 4 | 8
+    const DIVISIONS = [1, 2, 4, 8];
+    let loopCount = 0;      // how many times the main sequence has wrapped
+    // Absolute step counter — lets each row work out where ITS playhead is.
+    let globalStep = 0;
 
     function defaultSynthFor(key) {
         // guess a sensible voice type from the row name
@@ -729,19 +751,22 @@
         ROWS.forEach(r => {
             rowSource[r.key] = r.synthOnly ? 'synth' : 'sample';
             synthP[r.key] = defaultSynthFor(r.key);
+            rowDiv[r.key] = 1;
         });
         if (saved) {
             if (saved.src) for (const k in saved.src)
                 if (rowSource[k] !== undefined) rowSource[k] = saved.src[k];
             if (saved.p) for (const k in saved.p)
                 if (synthP[k]) synthP[k] = { ...synthP[k], ...saved.p[k] };
+            if (saved.div) for (const k in saved.div)
+                if (rowDiv[k] !== undefined) rowDiv[k] = saved.div[k];
             // custom rows are always synth
             ROWS.forEach(r => { if (r.synthOnly) rowSource[r.key] = 'synth'; });
         }
     })();
     function saveRowConfig() {
         try {
-            localStorage.setItem(SRC_KEY, JSON.stringify({ src: rowSource, p: synthP }));
+            localStorage.setItem(SRC_KEY, JSON.stringify({ src: rowSource, p: synthP, div: rowDiv }));
             localStorage.setItem(ROWS_KEY, JSON.stringify(ROWS));
         } catch (e) {}
     }
@@ -1304,6 +1329,25 @@
             name.addEventListener('click', () => selectRow(r.key));
             name.dataset.key = r.key;
 
+            // time-division badge: click to cycle 1 → 1/2 → 1/4 → 1/8 → 1
+            const div = document.createElement('div');
+            div.className = 'divbadge';
+            div.dataset.key = r.key;
+            div.title = 'Playback speed for this row: 1 = normal, \u00bd = half speed (takes 2 bars to cross), \u00bc = quarter speed, \u215b = eighth';
+            const paintDiv = () => {
+                const d = rowDiv[r.key] || 1;
+                div.textContent = d === 1 ? '1' : '½¼⅛'[[2,4,8].indexOf(d)];
+                div.classList.toggle('active', d > 1);
+            };
+            div.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                const cur = rowDiv[r.key] || 1;
+                const i = DIVISIONS.indexOf(cur);
+                rowDiv[r.key] = DIVISIONS[(i + 1) % DIVISIONS.length];
+                paintDiv(); saveRowConfig();
+            });
+            paintDiv();
+
             const steps = document.createElement('div');
             steps.className = 'steps';
             cellEls[r.key] = [];
@@ -1347,7 +1391,7 @@
                 steps.appendChild(c);
                 cellEls[r.key].push(c);
             }
-            row.appendChild(name); row.appendChild(steps);
+            row.appendChild(name); row.appendChild(div); row.appendChild(steps);
             gridEl.appendChild(row);
         });
         // beat numbers (built for MAX_STEPS; dimmed beyond the active length)
@@ -1455,21 +1499,31 @@
     // Each step also carries a PROBABILITY (probs) — the dice are rolled fresh
     // every pass, so sub-100% steps flicker in and out and the loop never repeats
     // exactly. `humanize` adds subtle timing + velocity drift on top.
-    function scheduleStep(step, time) {
+    function scheduleStep(step, time, gStep) {
         const stepDur = secPerStep();
+        const G = (gStep === undefined) ? globalStep : gStep;
         ROWS.forEach(r => {
-            const n = grid[r.key][step];
+            const dv = rowDiv[r.key] || 1;
+            // A slowed row advances one of ITS steps every `dv` main steps, so its
+            // 16 cells stretch across `dv` passes of the main loop. In between it
+            // simply holds — nothing retriggers until its own step changes.
+            let myStep = step;
+            if (dv > 1) {
+                if (G % dv !== 0) return;             // not this row's moment yet
+                myStep = Math.floor(G / dv) % STEPS;  // where this row's playhead is
+            }
+            const n = grid[r.key][myStep];
             if (!n) return;
             // roll the dice for this step, this pass
-            const chance = (probs[r.key] && probs[r.key][step] !== undefined)
-                         ? probs[r.key][step] : 100;
+            const chance = (probs[r.key] && probs[r.key][myStep] !== undefined)
+                         ? probs[r.key][myStep] : 100;
             if (chance < 100 && Math.random() * 100 >= chance) return;
 
             // humanize: timing drift (up to ~18ms) and velocity drift
             const tJit = humanize ? (Math.random() - 0.5) * 0.036 * humanize : 0;
             // per-step velocity, plus optional random variation on top
-            const stepVel = ((vels[r.key] && vels[r.key][step] !== undefined)
-                            ? vels[r.key][step] : 100) / 100;
+            const stepVel = ((vels[r.key] && vels[r.key][myStep] !== undefined)
+                            ? vels[r.key][myStep] : 100) / 100;
             const vJit = () => {
                 let v = stepVel;
                 if (velRandom) v *= 1 - Math.random() * 0.7 * velRandom;
@@ -1478,7 +1532,8 @@
             };
 
             if (n === 1) { trigger(r.key, Math.max(0, time + tJit), vJit()); return; }
-            const sub = stepDur / n;
+            // a ratchet on a slowed row spreads across its (longer) step
+            const sub = (stepDur * dv) / n;
             for (let k = 0; k < n; k++) {
                 // slight taper across the roll so it sounds played, not machine-gunned
                 const accent = (k === 0) ? 1.0 : 0.72 + 0.18 * (k / Math.max(1, n - 1));
@@ -1488,18 +1543,26 @@
         });
     }
 
-    function draw(step) {
-        // move the playhead highlight
+    // Each row's playhead runs at its OWN speed. A row on ½ advances one cell every
+    // two main steps, so its highlight visibly crawls across the grid at half rate,
+    // taking two bars to complete a pass.
+    function draw(step, gStep) {
+        const G = (gStep === undefined) ? globalStep : gStep;
         ROWS.forEach(r => {
-            cellEls[r.key].forEach((c, i) => c.classList.toggle('play', i === step));
+            const dv = rowDiv[r.key] || 1;
+            const myStep = (dv > 1) ? (Math.floor(G / dv) % STEPS) : step;
+            const cells = cellEls[r.key] || [];
+            cells.forEach((c, i) => c.classList.toggle('play', i === myStep));
         });
     }
 
     function advance() {
         nextNoteTime += secPerStep();
         currentStep++;
+        globalStep++;                         // drives the slowed rows' playheads
         if (currentStep >= STEPS) {
             currentStep = 0;
+            loopCount++;
             // ---- end of sequence: apply a cued preset if one is waiting ----
             if (cuedPreset !== null) {
                 loadPreset(cuedPreset);
@@ -1519,11 +1582,12 @@
         while (nextNoteTime < audioCtx.currentTime + scheduleAhead) {
             const stepToPlay = currentStep;
             const timeToPlay = nextNoteTime;
-            scheduleStep(stepToPlay, timeToPlay);
+            const gAtPlay = globalStep;     // capture now; advance() bumps it
+            scheduleStep(stepToPlay, timeToPlay, gAtPlay);
             // schedule the visual playhead in sync (guarded so a late timeout after
             // stop doesn't re-light the grid)
             const delay = (timeToPlay - audioCtx.currentTime) * 1000;
-            setTimeout(() => { if (isPlaying) draw(stepToPlay); }, Math.max(0, delay));
+            setTimeout(() => { if (isPlaying) draw(stepToPlay, gAtPlay); }, Math.max(0, delay));
             advance();
         }
         timerID = setTimeout(scheduler, lookahead);
@@ -1538,6 +1602,8 @@
         }
         isPlaying = true;
         currentStep = 0;
+        loopCount = 0;                      // restart the division cycle
+        globalStep = 0;
         nextNoteTime = audioCtx.currentTime + 0.06;
         clearTimeout(timerID); timerID = null;
         scheduler();
@@ -1552,7 +1618,10 @@
         killAllSources();               // cut any audio already scheduled ahead
         const btn = document.getElementById('playBtn');
         btn.textContent = '▶'; btn.classList.remove('playing');
-        ROWS.forEach(r => cellEls[r.key].forEach(c => c.classList.remove('play')));
+        ROWS.forEach(r => (cellEls[r.key] || []).forEach(c => c.classList.remove('play')));
+        // clear any "resting" dimming from divided rows
+        document.querySelectorAll('.row.resting').forEach(el => el.classList.remove('resting'));
+        document.querySelectorAll('.divbadge.waiting').forEach(el => el.classList.remove('waiting'));
         // if a preset was cued, apply it now that we've stopped
         if (cuedPreset !== null) { loadPreset(cuedPreset); }
     }
@@ -1760,7 +1829,19 @@
         STEPS = (typeof s.steps === 'number' && s.steps >= 1 && s.steps <= MAX_STEPS) ? s.steps : MAX_STEPS;
         if (currentStep >= STEPS) currentStep = 0;
         refreshStepCountUI();
-        currentPreset = -1; cuedPreset = null;
+        // Load the setup INTO the currently selected preset slot, so a preset stays
+        // highlighted and any further edits still persist. (Previously this left
+        // nothing selected and edits went nowhere.)
+        const slot = (currentPreset >= 0) ? currentPreset : 0;
+        if (presetGrids) {
+            presetGrids[slot] = grid;
+            presetProbs[slot] = probs;
+            presetVels[slot]  = vels;
+            presetSteps[slot] = STEPS;
+            currentPreset = slot;
+            savePresetGrids();
+        }
+        cuedPreset = null;
         renderCells(); renderPresets();
         // restore EQ if the setup carries it
         if (s.eq) {
@@ -1772,7 +1853,8 @@
                 document.getElementById('eq' + cap(band) + 'Val').textContent = (db > 0 ? '+' : '') + db + ' dB';
             });
         }
-        document.getElementById('curName').textContent = s.name || 'Setup';
+        document.getElementById('curName').textContent =
+            (s.name || 'Setup') + ' → P' + ((currentPreset >= 0 ? currentPreset : 0) + 1);
         document.getElementById('cueNote').textContent = '';
         // restore effects
         if (s.fx) {
@@ -1841,7 +1923,7 @@
                 vels: presetVels, steps: presetSteps,
             },
             rows: ROWS,
-            rowSource, synthP,
+            rowSource, synthP, rowDiv,
             global: collectGlobal(),
             setups: readSetups(),
             midi: midiBindings,
@@ -1891,8 +1973,13 @@
                     for (const k in synthP) delete synthP[k];
                     Object.assign(synthP, d.synthP);
                 }
+                if (d.rowDiv) {
+                    for (const k in rowDiv) delete rowDiv[k];
+                    Object.assign(rowDiv, d.rowDiv);
+                }
                 // make sure every row has synth params & source
                 ROWS.forEach(r => {
+                    if (!rowDiv[r.key]) rowDiv[r.key] = 1;
                     if (!synthP[r.key]) synthP[r.key] = defaultSynthFor(r.key);
                     if (!rowSource[r.key]) rowSource[r.key] = r.synthOnly ? 'synth' : 'sample';
                     if (shortLen[r.key] === undefined) {
