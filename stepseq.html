@@ -219,6 +219,23 @@
     .grid.velmode .step { cursor: ns-resize; }
     .grid.velmode .steps .step:not(.disabled):hover { outline: 1px solid var(--accent); }
 
+    /* ---- chord rows: same grid, different colour ---- */
+    .row.chordrow .name { color: #a68ce8; }
+    .row.chordrow .name.sel { color: #c9b6ff; }
+    .step.chord { background-color: #8f6fe0; }
+    .step.chord.ratchet { color: #fff; }
+    /* a subtle divider above the chord block */
+    .row.chordrow.first { margin-top: 8px; border-top: 1px solid #2e2e2e; padding-top: 8px; }
+    /* chord rows: the row label IS the chord name, and selects it for editing */
+    .name.chordlabel {
+        color: #a68ce8; font-weight: bold; cursor: pointer;
+    }
+    .name.chordlabel:hover { color: #c9b6ff; }
+    .name.chordlabel.sel { color: #fff; }
+    .name.chordlabel.sel::after { content: ' \2039'; color: #8f6fe0; }
+    .chord-notes { font-size: 10px; color: #8f6fe0; font-weight: normal;
+                   text-transform: none; letter-spacing: 0; margin-left: 8px; }
+
     /* per-row time-division badge */
     .divbadge {
         width: 20px; flex-shrink: 0; margin-right: 6px;
@@ -420,6 +437,18 @@
         <span class="hint" id="stepHint"></span>
     </div>
 
+    <div class="steps-ctl" id="chordBar">
+        <label>Chords</label>
+        <select id="rootSel" class="synth-sel" style="flex:0 0 70px;"></select>
+        <select id="scaleSel" class="synth-sel" style="flex:0 0 110px;"></select>
+        <select id="voiceSel" class="synth-sel" style="flex:0 0 90px;">
+            <option value="pad">Pad</option>
+            <option value="pluck">Pluck</option>
+            <option value="bass">Bass</option>
+            <option value="stab">Stab</option>
+        </select>
+    </div>
+
     <div class="mode-row">
         <button class="roll-btn" id="rollMode" title="Roll mode: tap steps to set a ratchet (2/3/4/6/8 hits inside one step)">ROLL</button>
         <button class="roll-btn" id="chanceMode" title="Chance mode: tap steps to set how often they fire">CHANCE</button>
@@ -555,6 +584,94 @@
         <div class="samp-hint">Tap a row name in the grid to edit that sound.</div>
     </div>
 
+
+    <div class="panel" id="chordPanel" style="display:none;">
+        <div class="panel-title">
+            Chord: <span id="chordTitle" class="samp-name">Chord 1</span>
+            <span id="chordNotes" class="chord-notes"></span>
+            <button class="mini-btn" id="chordAudition" style="margin-left:auto; padding:4px 10px;">▶ Test</button>
+        </div>
+
+        <div class="samp-ctl">
+            <label>Degree</label>
+            <select id="cDeg" class="synth-sel"></select>
+            <span class="val" id="cDegVal"></span>
+        </div>
+        <div class="samp-ctl">
+            <label>Type</label>
+            <select id="cType" class="synth-sel"></select>
+        </div>
+        <div class="samp-ctl">
+            <label>Inversion</label>
+            <input type="range" id="cInv" min="0" max="3" value="0">
+            <span class="val" id="cInvVal">0</span>
+        </div>
+        <div class="samp-ctl">
+            <label>Octave</label>
+            <input type="range" id="cOct" min="-2" max="2" value="0">
+            <span class="val" id="cOctVal">0</span>
+        </div>
+        <div class="samp-ctl">
+            <label>Spread</label>
+            <input type="range" id="cSpread" min="0" max="1" value="0">
+            <span class="val" id="cSpreadVal">0</span>
+        </div>
+
+        <div class="panel-title" style="margin-top:16px;">Sound (all chords)</div>
+        <div class="samp-ctl">
+            <label>Preset</label>
+            <select id="voiceSel2" class="synth-sel"></select>
+        </div>
+        <div class="samp-ctl">
+            <label>Wave</label>
+            <select id="cWave" class="synth-sel">
+                <option value="sine">Sine</option>
+                <option value="triangle">Triangle</option>
+                <option value="square">Square</option>
+                <option value="sawtooth">Saw</option>
+            </select>
+        </div>
+        <div class="samp-ctl">
+            <label>Cutoff</label>
+            <input type="range" id="cCut" min="200" max="8000" value="2600">
+            <span class="val" id="cCutVal">2600</span>
+        </div>
+        <div class="samp-ctl">
+            <label>Reso</label>
+            <input type="range" id="cQ" min="0" max="100" value="6">
+            <span class="val" id="cQVal">6</span>
+        </div>
+        <div class="samp-ctl">
+            <label>Attack</label>
+            <input type="range" id="cAtk" min="0" max="100" value="12">
+            <span class="val" id="cAtkVal">12</span>
+        </div>
+        <div class="samp-ctl">
+            <label>Release</label>
+            <input type="range" id="cRel" min="2" max="150" value="55">
+            <span class="val" id="cRelVal">55</span>
+        </div>
+        <div class="samp-ctl">
+            <label>Length</label>
+            <input type="range" id="cLen" min="10" max="200" value="100">
+            <span class="val" id="cLenVal">100</span>
+        </div>
+        <div class="samp-ctl">
+            <label>Strum</label>
+            <input type="range" id="cStrum" min="0" max="100" value="0">
+            <span class="val" id="cStrumVal">0</span>
+        </div>
+        <div class="samp-ctl">
+            <label>Volume</label>
+            <input type="range" id="cVol" min="0" max="60" value="16">
+            <span class="val" id="cVolVal">16</span>
+        </div>
+
+        <div class="row-mgmt">
+            <button class="mini-btn" id="addChord">+ Add chord row</button>
+            <button class="mini-btn" id="removeChord">Remove this chord</button>
+        </div>
+    </div>
 
     <div class="foot">
         <div class="status">Preset <b id="curName">—</b><span class="cue" id="cueNote"></span>
@@ -712,22 +829,14 @@
     };
 
     // Per-row: which source to use, and the synth parameters for that row.
+    // Per-row source (sample vs synth), synth params, and time division.
     const SRC_KEY = 'sixteen_synth_v1';
     const rowSource = {};   // key -> 'sample' | 'synth'
     const synthP    = {};   // key -> { type, ...params }
-    // Per-row TIME DIVISION: how much SLOWER this row runs than the main sequence.
-    // 1 = normal speed. 2 = the row takes two passes of the main loop to cross its
-    // own 16 steps (each cell lasts twice as long), 4 = four passes, etc.
-    // This stretches a row into a longer, slower pattern — great for crashes,
-    // rides and anything you want evolving over several bars.
-    const rowDiv    = {};   // key -> 1 | 2 | 4 | 8
+    const rowDiv    = {};   // key -> 1 | 2 | 4 | 8  (playback speed divisor)
     const DIVISIONS = [1, 2, 4, 8];
-    let loopCount = 0;      // how many times the main sequence has wrapped
-    // Absolute step counter — lets each row work out where ITS playhead is.
-    let globalStep = 0;
 
     function defaultSynthFor(key) {
-        // guess a sensible voice type from the row name
         const guess = key.includes('kick') ? 'kick'
                     : key.includes('snare') ? 'snare'
                     : key.includes('hihat') ? 'hat'
@@ -737,14 +846,12 @@
     }
 
     const ROWS_KEY = 'sixteen_rows_v1';
-    // Restore user-added rows and per-row source/synth settings.
     (function loadRowConfig() {
         let saved = null;
         try { saved = JSON.parse(localStorage.getItem(SRC_KEY)); } catch (e) {}
         let savedRows = null;
         try { savedRows = JSON.parse(localStorage.getItem(ROWS_KEY)); } catch (e) {}
         if (Array.isArray(savedRows) && savedRows.length) {
-            // keep only well-formed entries; custom rows carry synthOnly:true
             const clean = savedRows.filter(r => r && r.key && r.name);
             if (clean.length) ROWS = clean;
         }
@@ -758,9 +865,7 @@
                 if (rowSource[k] !== undefined) rowSource[k] = saved.src[k];
             if (saved.p) for (const k in saved.p)
                 if (synthP[k]) synthP[k] = { ...synthP[k], ...saved.p[k] };
-            if (saved.div) for (const k in saved.div)
-                if (rowDiv[k] !== undefined) rowDiv[k] = saved.div[k];
-            // custom rows are always synth
+            if (saved.div) for (const k in saved.div) rowDiv[k] = saved.div[k];
             ROWS.forEach(r => { if (r.synthOnly) rowSource[r.key] = 'synth'; });
         }
     })();
@@ -770,6 +875,143 @@
             localStorage.setItem(ROWS_KEY, JSON.stringify(ROWS));
         } catch (e) {}
     }
+
+    /* ================= CHORD ROWS =================
+       Instead of a separate melodic editor, chords live as extra ROWS in the same
+       grid as the drums. You trigger them exactly like a kick or a snare — one tap
+       fires the whole chord. A few rows give you a backing progression without
+       turning the app into a workstation.
+    */
+    const SCALES = {
+        'Minor':          [0, 2, 3, 5, 7, 8, 10],
+        'Major':          [0, 2, 4, 5, 7, 9, 11],
+        'Dorian':         [0, 2, 3, 5, 7, 9, 10],
+        'Phrygian':       [0, 1, 3, 5, 7, 8, 10],
+        'Harmonic Minor': [0, 2, 3, 5, 7, 8, 11],
+    };
+    const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    const ROMAN = ['I','II','III','IV','V','VI','VII'];
+
+    let curScale = 'Minor';
+    let curRoot  = 0;                     // 0 = C
+    let chordOct = 3;                     // base octave for the chords
+    let chordVoice = 'pad';               // 'pad' | 'pluck' | 'bass' | 'stab'
+
+    // Each chord row carries its own settings: which scale degree, the chord
+    // TYPE (triad, 7th, sus, etc), an INVERSION, and an octave offset. Chords are
+    // built from the scale, so whatever you pick stays in key.
+    const CHORD_TYPES = {
+        'triad':  [0, 2, 4],           // root, 3rd, 5th
+        '7th':    [0, 2, 4, 6],
+        '9th':    [0, 2, 4, 6, 8],
+        'sus4':   [0, 3, 4],
+        'sus2':   [0, 1, 4],
+        '5th':    [0, 4],              // power chord
+        'octave': [0, 7],
+        '6th':    [0, 2, 4, 5],
+    };
+    const CHORD_COLOR = '#8f6fe0';
+
+    // Chord rows behave like drum rows: same grid, same steps, same triggering.
+    // Mutable so rows can be added and removed.
+    let CHORD_ROWS = [
+        { key: 'chord1', name: 'Chord 1', chord: true },
+        { key: 'chord2', name: 'Chord 2', chord: true },
+        { key: 'chord3', name: 'Chord 3', chord: true },
+        { key: 'chord4', name: 'Chord 4', chord: true },
+    ];
+    // per-chord-row settings, keyed by row key
+    const chordCfg = {};
+    function defaultChordCfg(i) {
+        const prog = [0, 5, 3, 4];      // i - VI - iv - v
+        return { deg: prog[i % prog.length], type: 'triad', inv: 0, oct: 0, spread: 0 };
+    }
+    CHORD_ROWS.forEach((r, i) => chordCfg[r.key] = defaultChordCfg(i));
+
+    function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+    function midiToName(m) { return NOTE_NAMES[((m % 12) + 12) % 12]; }
+
+    // Build the actual notes for a chord row from its config.
+    function chordNotes(key) {
+        const cfg = chordCfg[key] || defaultChordCfg(0);
+        const scale = SCALES[curScale];
+        const ivs = CHORD_TYPES[cfg.type] || CHORD_TYPES.triad;
+        let notes = ivs.map(iv => {
+            const d = cfg.deg + iv;
+            const oct = Math.floor(d / scale.length);
+            return 12 * (chordOct + cfg.oct + oct) + curRoot + scale[((d % scale.length) + scale.length) % scale.length];
+        });
+        // inversion: move the lowest note(s) up an octave
+        for (let i = 0; i < cfg.inv; i++) {
+            const lowest = notes.shift();
+            notes.push(lowest + 12);
+        }
+        // spread: lift the top note another octave for a wider voicing
+        if (cfg.spread) notes[notes.length - 1] += 12;
+        return notes.sort((a, b) => a - b);
+    }
+
+    function chordLabel(key) {
+        const cfg = chordCfg[key] || defaultChordCfg(0);
+        const scale = SCALES[curScale];
+        const deg = ((cfg.deg % scale.length) + scale.length) % scale.length;
+        const root = (curRoot + scale[deg]) % 12;
+        const third = ((scale[(deg + 2) % scale.length] - scale[deg]) % 12 + 12) % 12;
+        let q = (third === 3) ? 'm' : '';
+        if (cfg.type === 'sus4') q = 'sus4';
+        else if (cfg.type === 'sus2') q = 'sus2';
+        else if (cfg.type === '5th') q = '5';
+        else if (cfg.type === '7th') q += '7';
+        else if (cfg.type === '9th') q += '9';
+        else if (cfg.type === '6th') q += '6';
+        return midiToName(root) + q;
+    }
+
+    // ---- chord voice: detuned oscillators through a filter + envelope ----
+    const CHORD_VOICES = {
+        pad:   { wave: 'triangle', atk: 0.12, dec: 0.35, sus: 0.6,  rel: 0.55, cut: 2600, q: 0.6, vol: 0.16, len: 1.0 },
+        pluck: { wave: 'sawtooth', atk: 0.004,dec: 0.22, sus: 0.15, rel: 0.20, cut: 3400, q: 3.0, vol: 0.15, len: 0.5 },
+        bass:  { wave: 'square',   atk: 0.005,dec: 0.18, sus: 0.5,  rel: 0.12, cut: 1200, q: 2.0, vol: 0.20, len: 0.6 },
+        stab:  { wave: 'sawtooth', atk: 0.003,dec: 0.10, sus: 0.0,  rel: 0.10, cut: 4200, q: 1.5, vol: 0.17, len: 0.25 },
+        organ: { wave: 'square',   atk: 0.01, dec: 0.05, sus: 0.9,  rel: 0.12, cut: 2200, q: 0.4, vol: 0.13, len: 1.0 },
+        strings:{wave: 'sawtooth', atk: 0.35, dec: 0.40, sus: 0.75, rel: 0.80, cut: 2000, q: 0.5, vol: 0.13, len: 1.0 },
+    };
+    // live, editable copy of the current voice (the sound controls edit this)
+    const chordSound = { ...CHORD_VOICES.pad, strum: 0, detune: 4 };
+
+    function playChord(key, time, dur, vel) {
+        const v = chordSound;
+        const notes = chordNotes(key);
+        const hold = Math.max(0.05, dur * v.len);
+        notes.forEach((m, i) => {
+            const f = midiToFreq(m);
+            // strum spreads the notes slightly in time, like a strummed instrument
+            const t0 = time + (v.strum || 0) * 0.02 * i;
+            const o = audioCtx.createOscillator();
+            o.type = v.wave;
+            o.frequency.setValueAtTime(f, t0);
+            o.detune.setValueAtTime((i - (notes.length - 1) / 2) * (v.detune || 0), t0);
+            const filt = audioCtx.createBiquadFilter();
+            filt.type = 'lowpass';
+            filt.frequency.setValueAtTime(Math.min(15000, v.cut + f), t0);
+            filt.Q.setValueAtTime(v.q, t0);
+            const g = audioCtx.createGain();
+            const peak = (v.vol * (vel === undefined ? 1 : vel)) / notes.length * 2.2;
+            g.gain.setValueAtTime(0.0001, t0);
+            g.gain.linearRampToValueAtTime(peak, t0 + v.atk);
+            g.gain.linearRampToValueAtTime(Math.max(0.0001, peak * v.sus), t0 + v.atk + v.dec);
+            const endT = Math.max(t0 + v.atk + v.dec, t0 + hold);
+            g.gain.setValueAtTime(Math.max(0.0001, peak * v.sus), endT);
+            g.gain.exponentialRampToValueAtTime(0.0001, endT + v.rel);
+            o.connect(filt); filt.connect(g); g.connect(out());
+            o.start(t0); o.stop(endT + v.rel + 0.02);
+            trackSource(o);
+        });
+    }
+
+    // Drums plus the chord rows, in grid order. Chord rows sit at the bottom,
+    // under the kick, so the whole arrangement is visible in one grid.
+    function allRows() { return ROWS.concat(CHORD_ROWS); }
 
     // ---- Presets. Each is { name, steps, pattern: { rowKey: [counts] } } ----
     // In a pattern string: '.' = off, 'x' = single hit, and a DIGIT (2-8) = a
@@ -1182,17 +1424,17 @@
     let vels = {};                // parallel to grid: per-step velocity (0..100)
     function emptyGrid() {
         const g = {};
-        ROWS.forEach(r => g[r.key] = new Array(MAX_STEPS).fill(0));
+        allRows().forEach(r => g[r.key] = new Array(MAX_STEPS).fill(0));
         return g;
     }
     function fullProbs() {
         const p = {};
-        ROWS.forEach(r => p[r.key] = new Array(MAX_STEPS).fill(100));
+        allRows().forEach(r => p[r.key] = new Array(MAX_STEPS).fill(100));
         return p;
     }
     function fullVels() {
         const v = {};
-        ROWS.forEach(r => v[r.key] = new Array(MAX_STEPS).fill(100));
+        allRows().forEach(r => v[r.key] = new Array(MAX_STEPS).fill(100));
         return v;
     }
 
@@ -1319,15 +1561,28 @@
     const cellEls = {}; // rowKey -> [16 elements]
 
     function buildGrid() {
-        ROWS.forEach(r => {
+        allRows().forEach(r => {
             const row = document.createElement('div');
             row.className = 'row';
             const name = document.createElement('div');
             name.className = 'name' + (r.synthOnly ? ' custom' : '');
-            name.textContent = r.name;
-            // clicking the row name selects that sound for the big Length slider
-            name.addEventListener('click', () => selectRow(r.key));
             name.dataset.key = r.key;
+            if (r.chord) {
+                // the row label IS the chord — "Chord 1" tells you nothing useful
+                row.classList.add('chordrow');
+                if (CHORD_ROWS[0].key === r.key) row.classList.add('first');
+                name.classList.add('chordlabel');
+                name.textContent = chordLabel(r.key);
+                name.addEventListener('click', async () => {
+                    selectChord(r.key);
+                    await initAudio();
+                    playChord(r.key, audioCtx.currentTime + 0.02, 0.7, 1);
+                });
+            } else {
+                name.textContent = r.name;
+                // clicking a drum row name selects that sound for the editor panel
+                name.addEventListener('click', () => selectRow(r.key));
+            }
 
             // time-division badge: click to cycle 1 → 1/2 → 1/4 → 1/8 → 1
             const div = document.createElement('div');
@@ -1382,7 +1637,7 @@
                             vels[r.key][i] = 100;    // ...and velocity
                         }
                     }
-                    paintCell(c, grid[r.key][i], probs[r.key][i], vels[r.key][i]);
+                    paintCell(c, grid[r.key][i], probs[r.key][i], vels[r.key][i], !!r.chord);
                     // if we're editing a preset (not a loaded setup / blank), persist it
                     if (presetGrids && currentPreset >= 0 && grid === presetGrids[currentPreset]) {
                         savePresetGrids();
@@ -1409,8 +1664,9 @@
     //   CHANCE mode → shows the fire percentage
     //   VEL mode    → shows the velocity percentage
     //   otherwise   → shows the ratchet count (for rolls)
-    function paintCell(c, state, chance, vel) {
+    function paintCell(c, state, chance, vel, isChord) {
         const p = (chance === undefined) ? 100 : chance;
+        if (isChord) c.classList.toggle('chord', !!state);
         const v = (vel === undefined) ? 100 : vel;
         c.classList.toggle('on', !!state);
         c.classList.toggle('ratchet', state > 1);
@@ -1436,13 +1692,14 @@
     }
 
     function renderCells() {
-        ROWS.forEach(r => {
+        allRows().forEach(r => {
             for (let i = 0; i < MAX_STEPS; i++) {
                 const c = cellEls[r.key][i];
                 const active = i < STEPS;
                 paintCell(c, active ? grid[r.key][i] : 0,
                              active && probs[r.key] ? probs[r.key][i] : 100,
-                             active && vels[r.key] ? vels[r.key][i] : 100);
+                             active && vels[r.key] ? vels[r.key][i] : 100,
+                             !!r.chord);
                 c.classList.toggle('disabled', i >= STEPS);   // beyond the loop length
             }
         });
@@ -1502,7 +1759,7 @@
     function scheduleStep(step, time, gStep) {
         const stepDur = secPerStep();
         const G = (gStep === undefined) ? globalStep : gStep;
-        ROWS.forEach(r => {
+        allRows().forEach(r => {
             const dv = rowDiv[r.key] || 1;
             // A slowed row advances one of ITS steps every `dv` main steps, so its
             // 16 cells stretch across `dv` passes of the main loop. In between it
@@ -1531,6 +1788,17 @@
                 return Math.max(0.05, v);
             };
 
+            // ---- chord rows fire a whole chord instead of a drum sound ----
+            if (r.chord) {
+                // the chord rings until the next step of this row
+                const hold = stepDur * dv * (n > 1 ? 1 / n : 1) * 3.5;
+                if (n === 1) { playChord(r.key, Math.max(0, time + tJit), hold, vJit()); return; }
+                const csub = stepDur / n;
+                for (let k = 0; k < n; k++)
+                    playChord(r.key, Math.max(0, time + k * csub + tJit), hold, vJit() * (k ? 0.8 : 1));
+                return;
+            }
+
             if (n === 1) { trigger(r.key, Math.max(0, time + tJit), vJit()); return; }
             // A ratchet keeps its NORMAL speed even on a slowed row — a roll's
             // character comes from how fast it is, so we pack it into one main
@@ -1544,6 +1812,7 @@
                 trigger(r.key, Math.max(0, time + k * sub + tJit + kJit), accent * vJit());
             }
         });
+
     }
 
     // Each row's playhead runs at its OWN speed. A row on ½ advances one cell every
@@ -1551,7 +1820,7 @@
     // taking two bars to complete a pass.
     function draw(step, gStep) {
         const G = (gStep === undefined) ? globalStep : gStep;
-        ROWS.forEach(r => {
+        allRows().forEach(r => {
             const dv = rowDiv[r.key] || 1;
             const myStep = (dv > 1) ? (Math.floor(G / dv) % STEPS) : step;
             const cells = cellEls[r.key] || [];
@@ -2241,6 +2510,11 @@
 
     function selectRow(key) {
         selectedRow = key;
+        // showing the sample/synth editor means hiding the chord editor
+        const cp = document.getElementById('chordPanel');
+        if (cp) cp.style.display = 'none';
+        const sp = document.getElementById('samplePanel');
+        if (sp) sp.style.display = '';
         document.querySelectorAll('.row .name').forEach(n =>
             n.classList.toggle('sel', n.dataset.key === key));
         const row = ROWS.find(r => r.key === key);
@@ -2386,6 +2660,236 @@
         rebuildGrid();
         selectRow(ROWS[ROWS.length - 1].key);
     });
+
+    /* ================= CHORD EDITOR ================= */
+    let selChord = 'chord1';
+
+    function refreshChordLabels() {
+        document.querySelectorAll('.name.chordlabel').forEach(el => {
+            if (chordCfg[el.dataset.key]) el.textContent = chordLabel(el.dataset.key);
+            el.classList.toggle('sel', el.dataset.key === selChord);
+        });
+    }
+
+    function selectChord(key) {
+        selChord = key;
+        if (!chordCfg[key]) chordCfg[key] = defaultChordCfg(0);
+        const cfg = chordCfg[key];
+        const row = CHORD_ROWS.find(r => r.key === key);
+        // the two editors are mutually exclusive — only one is ever relevant
+        document.getElementById('chordPanel').style.display = '';
+        document.getElementById('samplePanel').style.display = 'none';
+        document.querySelectorAll('.row .name.sel').forEach(n => n.classList.remove('sel'));
+        document.getElementById('chordTitle').textContent = chordLabel(key);
+
+        // degree dropdown reflects the current scale length
+        const dsel = document.getElementById('cDeg');
+        dsel.innerHTML = '';
+        SCALES[curScale].forEach((_, i) => {
+            const o = document.createElement('option');
+            o.value = i; o.textContent = ROMAN[i] || (i + 1);
+            dsel.appendChild(o);
+        });
+        dsel.value = Math.min(cfg.deg, SCALES[curScale].length - 1);
+
+        const tsel = document.getElementById('cType');
+        if (!tsel.options.length) Object.keys(CHORD_TYPES).forEach(k => {
+            const o = document.createElement('option');
+            o.value = k; o.textContent = k; tsel.appendChild(o);
+        });
+        tsel.value = cfg.type;
+
+        const setv = (id, v) => {
+            const el = document.getElementById(id);
+            if (el) { el.value = v; const l = document.getElementById(id + 'Val'); if (l) l.textContent = v; }
+        };
+        setv('cInv', cfg.inv); setv('cOct', cfg.oct); setv('cSpread', cfg.spread);
+        document.getElementById('cDegVal').textContent = chordLabel(key);
+        // sound controls
+        setv('cCut', Math.round(chordSound.cut));
+        setv('cQ', Math.round(chordSound.q * 10));
+        setv('cAtk', Math.round(chordSound.atk * 100));
+        setv('cRel', Math.round(chordSound.rel * 100));
+        setv('cLen', Math.round(chordSound.len * 100));
+        setv('cStrum', Math.round((chordSound.strum || 0) * 100));
+        setv('cVol', Math.round(chordSound.vol * 100));
+        document.getElementById('cWave').value = chordSound.wave;
+        showChordNotes(key);
+        refreshChordLabels();
+    }
+
+    function showChordNotes(key) {
+        const ns = chordNotes(key).map(m => midiToName(m) + (Math.floor(m / 12) - 1));
+        document.getElementById('chordNotes').textContent = ns.join(' ');
+    }
+
+    async function chordChanged(retrigger) {
+        saveChords();
+        showChordNotes(selChord);
+        document.getElementById('cDegVal').textContent = chordLabel(selChord);
+        refreshChordLabels();
+        if (retrigger !== false) {
+            await initAudio();
+            playChord(selChord, audioCtx.currentTime + 0.02, 0.7, 1);
+        }
+    }
+
+    // ---- per-chord controls ----
+    document.getElementById('cDeg').addEventListener('change', e => {
+        chordCfg[selChord].deg = parseInt(e.target.value); chordChanged();
+    });
+    document.getElementById('cType').addEventListener('change', e => {
+        chordCfg[selChord].type = e.target.value; chordChanged();
+    });
+    [['cInv','inv'],['cOct','oct'],['cSpread','spread']].forEach(([id, prop]) => {
+        document.getElementById(id).addEventListener('input', e => {
+            const v = parseInt(e.target.value);
+            chordCfg[selChord][prop] = v;
+            document.getElementById(id + 'Val').textContent = v;
+            chordChanged();
+        });
+    });
+
+    // ---- shared sound controls ----
+    function soundCtl(id, apply) {
+        document.getElementById(id).addEventListener('input', e => {
+            const v = parseInt(e.target.value);
+            apply(v);
+            document.getElementById(id + 'Val').textContent = v;
+            saveChords();
+        });
+    }
+    soundCtl('cCut',   v => chordSound.cut = v);
+    soundCtl('cQ',     v => chordSound.q = v / 10);
+    soundCtl('cAtk',   v => chordSound.atk = v / 100);
+    soundCtl('cRel',   v => chordSound.rel = v / 100);
+    soundCtl('cLen',   v => chordSound.len = v / 100);
+    soundCtl('cStrum', v => chordSound.strum = v / 100);
+    soundCtl('cVol',   v => chordSound.vol = v / 100);
+    document.getElementById('cWave').addEventListener('change', e => {
+        chordSound.wave = e.target.value; saveChords();
+    });
+    document.getElementById('chordAudition').addEventListener('click', async () => {
+        await initAudio();
+        playChord(selChord, audioCtx.currentTime + 0.02, 0.8, 1);
+    });
+
+    // voice presets (both the top bar and the panel dropdown)
+    function applyVoicePreset(name) {
+        if (!CHORD_VOICES[name]) return;
+        Object.assign(chordSound, CHORD_VOICES[name]);
+        chordVoice = name;
+        saveChords();
+        selectChord(selChord);
+    }
+
+    /* ---- add / remove chord rows ---- */
+    document.getElementById('addChord').addEventListener('click', () => {
+        const key = 'chord_' + Date.now().toString(36);
+        const n = CHORD_ROWS.length + 1;
+        CHORD_ROWS.push({ key, name: 'Chord ' + n, chord: true });
+        chordCfg[key] = defaultChordCfg(CHORD_ROWS.length - 1);
+        rowDiv[key] = 1;
+        [presetGrids, presetProbs, presetVels].forEach((coll, ci) => {
+            if (coll) coll.forEach(obj => obj[key] = new Array(MAX_STEPS).fill(ci === 0 ? 0 : 100));
+        });
+        grid[key]  = grid[key]  || new Array(MAX_STEPS).fill(0);
+        probs[key] = probs[key] || new Array(MAX_STEPS).fill(100);
+        vels[key]  = vels[key]  || new Array(MAX_STEPS).fill(100);
+        saveChords(); savePresetGrids();
+        rebuildGrid();
+        selectChord(key);
+    });
+    document.getElementById('removeChord').addEventListener('click', () => {
+        if (CHORD_ROWS.length <= 1) { alert('Keep at least one chord row.'); return; }
+        const row = CHORD_ROWS.find(r => r.key === selChord);
+        if (!row) return;
+        if (!confirm('Remove ' + row.name + '?')) return;
+        const key = row.key;
+        CHORD_ROWS = CHORD_ROWS.filter(r => r.key !== key);
+        delete chordCfg[key]; delete rowDiv[key];
+        [presetGrids, presetProbs, presetVels].forEach(coll => {
+            if (coll) coll.forEach(obj => delete obj[key]);
+        });
+        delete grid[key]; delete probs[key]; delete vels[key];
+        saveChords(); savePresetGrids();
+        rebuildGrid();
+        selectChord(CHORD_ROWS[0].key);
+    });
+
+    /* ================= CHORD SETTINGS UI ================= */
+    (function buildChordBar() {
+        const rootSel = document.getElementById('rootSel');
+        NOTE_NAMES.forEach((n, i) => {
+            const o = document.createElement('option');
+            o.value = i; o.textContent = n; rootSel.appendChild(o);
+        });
+        const scaleSel = document.getElementById('scaleSel');
+        Object.keys(SCALES).forEach(k => {
+            const o = document.createElement('option');
+            o.value = k; o.textContent = k; scaleSel.appendChild(o);
+        });
+        // voice preset lists (top bar + panel)
+        [document.getElementById('voiceSel'), document.getElementById('voiceSel2')].forEach(sel => {
+            if (!sel) return;
+            sel.innerHTML = '';
+            Object.keys(CHORD_VOICES).forEach(k => {
+                const o = document.createElement('option');
+                o.value = k; o.textContent = k.charAt(0).toUpperCase() + k.slice(1);
+                sel.appendChild(o);
+            });
+            sel.addEventListener('change', async e => {
+                applyVoicePreset(e.target.value);
+                const other = (sel.id === 'voiceSel') ? document.getElementById('voiceSel2')
+                                                      : document.getElementById('voiceSel');
+                if (other) other.value = e.target.value;
+                await initAudio();
+                playChord(selChord, audioCtx.currentTime + 0.02, 0.7, 1);
+            });
+        });
+        rootSel.addEventListener('change', e => {
+            curRoot = parseInt(e.target.value); saveChords();
+            refreshChordLabels(); showChordNotes(selChord);
+        });
+        scaleSel.addEventListener('change', e => {
+            curScale = e.target.value;
+            const len = SCALES[curScale].length;
+            Object.values(chordCfg).forEach(c => c.deg = c.deg % len);
+            saveChords(); selectChord(selChord); refreshChordLabels();
+        });
+        setTimeout(() => {
+            rootSel.value = curRoot; scaleSel.value = curScale;
+            const v1 = document.getElementById('voiceSel'), v2 = document.getElementById('voiceSel2');
+            if (v1) v1.value = chordVoice;
+            if (v2) v2.value = chordVoice;
+        }, 0);
+    })();
+
+    const CHORD_KEY = 'sixteen_chords_v2';
+    function saveChords() {
+        try {
+            localStorage.setItem(CHORD_KEY, JSON.stringify({
+                scale: curScale, root: curRoot, oct: chordOct, voice: chordVoice,
+                rows: CHORD_ROWS, cfg: chordCfg, sound: chordSound,
+            }));
+        } catch (e) {}
+    }
+    (function loadChords() {
+        let s = null;
+        try { s = JSON.parse(localStorage.getItem(CHORD_KEY)); } catch (e) {}
+        if (!s) return;
+        if (s.scale && SCALES[s.scale]) curScale = s.scale;
+        if (typeof s.root === 'number') curRoot = s.root;
+        if (typeof s.oct === 'number') chordOct = s.oct;
+        if (s.voice && CHORD_VOICES[s.voice]) chordVoice = s.voice;
+        if (Array.isArray(s.rows) && s.rows.length) {
+            CHORD_ROWS = s.rows.filter(r => r && r.key && r.name);
+            CHORD_ROWS.forEach(r => r.chord = true);
+        }
+        if (s.cfg) { for (const k in s.cfg) chordCfg[k] = s.cfg[k]; }
+        CHORD_ROWS.forEach((r, i) => { if (!chordCfg[r.key]) chordCfg[r.key] = defaultChordCfg(i); });
+        if (s.sound) Object.assign(chordSound, s.sound);
+    })();
 
     // rebuild the grid DOM after rows are added or removed
     function rebuildGrid() {
@@ -2533,7 +3037,8 @@
     renderLearn();
     renderFxPresets();
     refreshFxUI();
-    selectRow('kick');
+    selectChord(CHORD_ROWS[0].key);   // populate the chord panel
+    selectRow('kick');               // ...but start on the drum editor
     // restore app-wide settings (EQ, effects, humanize, tempo, per-sound params)
     (function restoreGlobal() {
         let g = null;
