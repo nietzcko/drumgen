@@ -1532,8 +1532,11 @@
             };
 
             if (n === 1) { trigger(r.key, Math.max(0, time + tJit), vJit()); return; }
-            // a ratchet on a slowed row spreads across its (longer) step
-            const sub = (stepDur * dv) / n;
+            // A ratchet keeps its NORMAL speed even on a slowed row — a roll's
+            // character comes from how fast it is, so we pack it into one main
+            // step's worth of time and simply let it fire wherever the slow row
+            // lands, rather than stretching it out.
+            const sub = stepDur / n;
             for (let k = 0; k < n; k++) {
                 // slight taper across the roll so it sounds played, not machine-gunned
                 const accent = (k === 0) ? 1.0 : 0.72 + 0.18 * (k / Math.max(1, n - 1));
