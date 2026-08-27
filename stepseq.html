@@ -333,6 +333,11 @@
     .learn-row.listening { border-color: var(--accent); }
     .learn-row.listening .bind { color: var(--accent); }
     .learn-row.flash { border-color: #6bd06b; }
+    .learn-row .clearBtn {
+        padding: 6px 10px; font-size: 14px; line-height: 1;
+        color: #777; border-color: #444;
+    }
+    .learn-row .clearBtn:hover { color: var(--accent); border-color: #5c2a28; }
     .midi-hint { font-size: 11px; color: #555; margin-top: 10px; line-height: 1.5; }
     .midi-hint b { color: #888; }
 
@@ -2442,15 +2447,44 @@
             row.className = 'learn-row' + (midiLearning === a.id ? ' listening' : '');
             row.id = 'learn_' + a.id;
             const b = midiBindings[a.id];
+            // an assigned action also gets an × to clear it
             row.innerHTML = `<span class="act">${a.label}</span>
                 <span class="bind ${b ? 'set' : ''}">${midiLearning === a.id ? 'press pedal…' : bindLabel(b)}</span>
-                <button class="mini-btn ${midiLearning === a.id ? 'on' : ''}">${midiLearning === a.id ? 'Cancel' : 'Learn'}</button>`;
-            row.querySelector('button').addEventListener('click', () => {
+                <button class="mini-btn learnBtn ${midiLearning === a.id ? 'on' : ''}">${midiLearning === a.id ? 'Cancel' : 'Learn'}</button>
+                ${b ? '<button class="mini-btn clearBtn" title="Clear this assignment">\u00d7</button>' : ''}`;
+            row.querySelector('.learnBtn').addEventListener('click', () => {
                 midiLearning = (midiLearning === a.id) ? null : a.id;
+                renderLearn();
+            });
+            const clr = row.querySelector('.clearBtn');
+            if (clr) clr.addEventListener('click', () => {
+                delete midiBindings[a.id];
+                if (midiLearning === a.id) midiLearning = null;
+                writeBindings();
                 renderLearn();
             });
             list.appendChild(row);
         });
+        // show a "clear all" only when something is actually assigned
+        const any = Object.keys(midiBindings).length > 0;
+        let allBtn = document.getElementById('clearAllMidi');
+        if (any && !allBtn) {
+            allBtn = document.createElement('button');
+            allBtn.id = 'clearAllMidi';
+            allBtn.className = 'mini-btn';
+            allBtn.style.cssText = 'width:100%; margin-top:10px;';
+            allBtn.textContent = 'Clear all MIDI assignments';
+            allBtn.addEventListener('click', () => {
+                if (!confirm('Clear every MIDI assignment?')) return;
+                midiBindings = {};
+                midiLearning = null;
+                writeBindings();
+                renderLearn();
+            });
+            list.parentElement.insertBefore(allBtn, list.nextSibling);
+        } else if (!any && allBtn) {
+            allBtn.remove();
+        }
     }
 
     function handleMidi(msg) {
