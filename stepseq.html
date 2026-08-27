@@ -517,6 +517,7 @@
                 <label>Voice</label>
                 <select id="synthType" class="synth-sel">
                     <option value="kick">Kick</option>
+                    <option value="808">808</option>
                     <option value="sub">Sub</option>
                     <option value="tom">Tom</option>
                     <option value="snare">Snare</option>
@@ -533,13 +534,33 @@
             </div>
             <div class="samp-ctl">
                 <label>Sweep</label>
-                <input type="range" id="spPitchEnv" min="0" max="100" value="85">
-                <span class="val" id="spPitchEnvVal">85</span>
+                <input type="range" id="spPitchEnv" min="0" max="400" value="160">
+                <span class="val" id="spPitchEnvVal">160</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Glide</label>
+                <input type="range" id="spPitchTime" min="1" max="300" value="45">
+                <span class="val" id="spPitchTimeVal">5</span>
             </div>
             <div class="samp-ctl">
                 <label>Decay</label>
-                <input type="range" id="spDecay" min="2" max="150" value="32">
-                <span class="val" id="spDecayVal">32</span>
+                <input type="range" id="spDecay" min="2" max="300" value="42">
+                <span class="val" id="spDecayVal">42</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Hold</label>
+                <input type="range" id="spHold" min="0" max="50" value="1">
+                <span class="val" id="spHoldVal">1</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Drive</label>
+                <input type="range" id="spDrive" min="0" max="100" value="15">
+                <span class="val" id="spDriveVal">15</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Sub</label>
+                <input type="range" id="spSub" min="0" max="100" value="0">
+                <span class="val" id="spSubVal">0</span>
             </div>
             <div class="samp-ctl">
                 <label>Tone</label>
@@ -817,15 +838,26 @@
        Voice TYPES below are just starting points for those parameters; every
        knob stays editable afterwards.
     */
+    /* Voice presets. Parameters:
+         osc/noise  – layer balance          pitch     – base frequency (Hz)
+         pitchEnv   – how far the pitch drops (in octaves, up to ~4)
+         pitchTime  – how LONG the drop takes (s). Short = click, long = 808 slide
+         decay      – amp decay (s). 808s need 1-3s of sustain to read as a bass note
+         hold       – how long the body holds before decaying (s)
+         drive      – saturation: 0 = clean sine, 1 = distorted/hard
+         sub        – a sine an octave below, for extra weight
+         tone       – noise colour     click – attack transient    wave – osc shape
+    */
     const SYNTH_TYPES = {
-        kick:  { osc:1.0, noise:0.0, pitch:110, pitchEnv:0.85, decay:0.32, tone:0.15, wave:'sine',     click:0.15 },
-        tom:   { osc:1.0, noise:0.06,pitch:180, pitchEnv:0.55, decay:0.40, tone:0.30, wave:'sine',     click:0.10 },
-        snare: { osc:0.45,noise:0.85,pitch:190, pitchEnv:0.40, decay:0.22, tone:0.55, wave:'triangle', click:0.20 },
-        clap:  { osc:0.0, noise:1.0, pitch:400, pitchEnv:0.0,  decay:0.26, tone:0.60, wave:'sine',     click:0.0  },
-        hat:   { osc:0.0, noise:1.0, pitch:800, pitchEnv:0.0,  decay:0.07, tone:0.92, wave:'square',   click:0.0  },
-        cymbal:{ osc:0.12,noise:1.0, pitch:600, pitchEnv:0.0,  decay:0.90, tone:0.80, wave:'square',   click:0.0  },
-        zap:   { osc:1.0, noise:0.0, pitch:900, pitchEnv:0.95, decay:0.18, tone:0.45, wave:'sawtooth', click:0.0  },
-        sub:   { osc:1.0, noise:0.0, pitch:55,  pitchEnv:0.25, decay:0.60, tone:0.05, wave:'sine',     click:0.0  },
+        kick:  { osc:1.0, noise:0.0, pitch:110, pitchEnv:1.6, pitchTime:0.045, decay:0.42, hold:0.01, drive:0.15, sub:0.0,  tone:0.15, wave:'sine',     click:0.15 },
+        '808': { osc:1.0, noise:0.0, pitch:48,  pitchEnv:2.2, pitchTime:0.085, decay:1.90, hold:0.06, drive:0.30, sub:0.35, tone:0.05, wave:'sine',     click:0.06 },
+        sub:   { osc:1.0, noise:0.0, pitch:42,  pitchEnv:0.5, pitchTime:0.05,  decay:1.20, hold:0.08, drive:0.05, sub:0.5,  tone:0.05, wave:'sine',     click:0.0  },
+        tom:   { osc:1.0, noise:0.06,pitch:180, pitchEnv:0.9, pitchTime:0.06,  decay:0.45, hold:0.0,  drive:0.10, sub:0.0,  tone:0.30, wave:'sine',     click:0.10 },
+        snare: { osc:0.45,noise:0.85,pitch:190, pitchEnv:0.6, pitchTime:0.03,  decay:0.22, hold:0.0,  drive:0.15, sub:0.0,  tone:0.55, wave:'triangle', click:0.20 },
+        clap:  { osc:0.0, noise:1.0, pitch:400, pitchEnv:0.0, pitchTime:0.02,  decay:0.26, hold:0.0,  drive:0.0,  sub:0.0,  tone:0.60, wave:'sine',     click:0.0  },
+        hat:   { osc:0.0, noise:1.0, pitch:800, pitchEnv:0.0, pitchTime:0.02,  decay:0.07, hold:0.0,  drive:0.0,  sub:0.0,  tone:0.92, wave:'square',   click:0.0  },
+        cymbal:{ osc:0.12,noise:1.0, pitch:600, pitchEnv:0.0, pitchTime:0.02,  decay:0.90, hold:0.0,  drive:0.0,  sub:0.0,  tone:0.80, wave:'square',   click:0.0  },
+        zap:   { osc:1.0, noise:0.0, pitch:900, pitchEnv:3.0, pitchTime:0.10,  decay:0.18, hold:0.0,  drive:0.20, sub:0.0,  tone:0.45, wave:'sawtooth', click:0.0  },
     };
 
     // Per-row: which source to use, and the synth parameters for that row.
@@ -865,13 +897,12 @@
                 if (rowSource[k] !== undefined) rowSource[k] = saved.src[k];
             if (saved.p) for (const k in saved.p)
                 if (synthP[k]) synthP[k] = { ...synthP[k], ...saved.p[k] };
-            if (saved.div) for (const k in saved.div) rowDiv[k] = saved.div[k];
             ROWS.forEach(r => { if (r.synthOnly) rowSource[r.key] = 'synth'; });
         }
     })();
     function saveRowConfig() {
         try {
-            localStorage.setItem(SRC_KEY, JSON.stringify({ src: rowSource, p: synthP, div: rowDiv }));
+            localStorage.setItem(SRC_KEY, JSON.stringify({ src: rowSource, p: synthP }));
             localStorage.setItem(ROWS_KEY, JSON.stringify(ROWS));
         } catch (e) {}
     }
@@ -1335,17 +1366,52 @@
     // Synth fallback voices (mirrors the groove app so it sounds the same w/o wavs)
     // Parameterized drum synth. Builds every voice from the same three parts:
     // a pitch-swept oscillator, a filtered noise layer, and an amp envelope.
+    // Saturation curve for the `drive` parameter. Adds harmonics so a low sine
+    // still cuts through on small speakers — essential for 808-style kicks.
+    let _driveCurves = {};
+    function driveCurve(amount) {
+        const k = Math.round(amount * 20);
+        if (_driveCurves[k]) return _driveCurves[k];
+        const n = 1024, c = new Float32Array(n);
+        const kk = amount * 60;
+        for (let i = 0; i < n; i++) {
+            const x = (i / (n - 1)) * 2 - 1;
+            c[i] = (1 + kk) * x / (1 + kk * Math.abs(x));
+        }
+        _driveCurves[k] = c;
+        return c;
+    }
+
     function playSynth(key, vol, time, short) {
         const p = synthP[key] || defaultSynthFor(key);
-        const sf = short ? Math.max(0.15, shortLen[key]) : 1;   // length knob scales decay
+        // `shortLen` scales the decay, but never below a usable minimum
+        const sf = short ? Math.max(0.15, shortLen[key]) : 1;
         vol = Math.min(1.6, vol * (sampVol[key] === undefined ? 1 : sampVol[key]));
 
-        const dur = Math.max(0.02, p.decay * sf);
+        const decay = Math.max(0.02, (p.decay || 0.3) * sf);
+        const hold  = Math.max(0, (p.hold || 0) * sf);
+        const total = hold + decay;
+
+        // master gain for this hit
         const g = audioCtx.createGain();
         g.gain.setValueAtTime(0.0001, time);
-        g.gain.linearRampToValueAtTime(vol, time + 0.002);       // fast attack, no click
-        g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
-        g.connect(out());
+        g.gain.linearRampToValueAtTime(vol, time + 0.002);      // fast attack, no click
+        if (hold > 0.001) g.gain.setValueAtTime(vol, time + hold);   // hold the body
+        g.gain.exponentialRampToValueAtTime(0.0001, time + total);
+
+        // optional saturation stage
+        let node = g;
+        if (p.drive > 0.001) {
+            const sh = audioCtx.createWaveShaper();
+            sh.curve = driveCurve(p.drive);
+            sh.oversample = '2x';
+            const post = audioCtx.createGain();
+            // drive raises level, so compensate to keep hits balanced
+            post.gain.value = 1 / (1 + p.drive * 1.4);
+            g.connect(sh); sh.connect(post); post.connect(out());
+        } else {
+            g.connect(out());
+        }
 
         // ---- oscillator layer (body / thump / tone) ----
         if (p.osc > 0.001) {
@@ -1353,31 +1419,42 @@
             const og = audioCtx.createGain();
             og.gain.value = p.osc;
             o.type = p.wave || 'sine';
-            const f0 = p.pitch;
-            // pitch envelope: sweeps down from a multiple of the base pitch.
-            // This is what makes a kick "thump" and a zap "pew".
-            const top = f0 * (1 + p.pitchEnv * 6);
-            o.frequency.setValueAtTime(top, time);
-            o.frequency.exponentialRampToValueAtTime(
-                Math.max(20, f0), time + Math.max(0.01, dur * (0.15 + p.pitchEnv * 0.5)));
+            const f0 = Math.max(20, p.pitch);
+            // Pitch envelope in OCTAVES over a controllable time. A short drop
+            // gives a punchy click; a long one gives the 808 "slide" into a note.
+            const top = f0 * Math.pow(2, p.pitchEnv || 0);
+            const pt  = Math.max(0.005, (p.pitchTime || 0.05) * (short ? Math.max(0.4, sf) : 1));
+            o.frequency.setValueAtTime(Math.min(18000, top), time);
+            o.frequency.exponentialRampToValueAtTime(f0, time + pt);
             o.connect(og); og.connect(g);
-            o.start(time); o.stop(time + dur + 0.02);
+            o.start(time); o.stop(time + total + 0.03);
             trackSource(o);
+
+            // ---- sub layer: a clean sine an octave down for extra weight ----
+            if (p.sub > 0.001) {
+                const so = audioCtx.createOscillator();
+                const sg = audioCtx.createGain();
+                so.type = 'sine';
+                so.frequency.setValueAtTime(Math.max(18, f0 / 2), time);
+                sg.gain.value = p.sub;
+                so.connect(sg); sg.connect(g);
+                so.start(time); so.stop(time + total + 0.03);
+                trackSource(so);
+            }
         }
 
         // ---- noise layer (snap / sizzle) ----
         if (p.noise > 0.001) {
             const nb = audioCtx.createBufferSource();
-            const len = Math.max(1, Math.floor(audioCtx.sampleRate * (dur + 0.02)));
+            const len = Math.max(1, Math.floor(audioCtx.sampleRate * (total + 0.02)));
             const b = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
             const d = b.getChannelData(0);
             for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
             nb.buffer = b;
             const nf = audioCtx.createBiquadFilter();
-            // `tone` sweeps the noise from dark/bandpassed to bright/highpassed
             if (p.tone > 0.5) {
                 nf.type = 'highpass';
-                nf.frequency.value = 200 * Math.pow(60, (p.tone - 0.5) * 2);  // ~200Hz..12kHz
+                nf.frequency.value = 200 * Math.pow(60, (p.tone - 0.5) * 2);
             } else {
                 nf.type = 'bandpass';
                 nf.frequency.value = 200 + p.tone * 4000;
@@ -1385,8 +1462,11 @@
             }
             const ng = audioCtx.createGain();
             ng.gain.value = p.noise;
+            // noise usually decays faster than the body
+            ng.gain.setValueAtTime(p.noise, time);
+            ng.gain.exponentialRampToValueAtTime(0.0001, time + Math.max(0.02, decay * 0.8));
             nb.connect(nf); nf.connect(ng); ng.connect(g);
-            nb.start(time); nb.stop(time + dur + 0.02);
+            nb.start(time); nb.stop(time + total + 0.02);
             trackSource(nb);
         }
 
@@ -1437,6 +1517,13 @@
         allRows().forEach(r => v[r.key] = new Array(MAX_STEPS).fill(100));
         return v;
     }
+    // Time divisions belong to the PRESET, not the row — each preset keeps its
+    // own 1 / ½ / ¼ / ⅛ setting per row.
+    function fullDivs() {
+        const d = {};
+        allRows().forEach(r => d[r.key] = 1);
+        return d;
+    }
 
     // Per-preset WORKING grids + PROBABILITIES + STEP COUNTS. These hold your edits
     // so switching presets and coming back keeps what you changed. Seeded from the
@@ -1473,6 +1560,7 @@
     let presetGrids = null;
     let presetProbs = null;   // per-preset probability layer
     let presetVels = null;    // per-preset velocity layer
+    let presetDivs = null;    // per-preset time-division layer
     let presetSteps = null;   // per-preset step count (how many steps are used)
 
     function loadPresetGrids() {
@@ -1522,6 +1610,13 @@
             }
             return presetToVels(idx);
         });
+        presetDivs = PRESETS.map((_, idx) => {
+            const s2 = saved && saved.divs && saved.divs[idx];
+            const d = fullDivs();
+            if (s2 && typeof s2 === 'object')
+                allRows().forEach(r => { if (typeof s2[r.key] === 'number') d[r.key] = s2[r.key]; });
+            return d;
+        });
         presetSteps = PRESETS.map((p, idx) => {
             const v = savedSteps && savedSteps[idx];
             if (typeof v === 'number' && v >= 1 && v <= MAX_STEPS) return v;
@@ -1531,7 +1626,7 @@
     function savePresetGrids() {
         try {
             localStorage.setItem(PGRID_KEY, JSON.stringify({
-                grids: presetGrids, probs: presetProbs, vels: presetVels, steps: presetSteps
+                grids: presetGrids, probs: presetProbs, vels: presetVels, divs: presetDivs, steps: presetSteps
             }));
         } catch (e) {}
     }
@@ -1542,6 +1637,9 @@
         grid = presetGrids[idx];
         probs = presetProbs[idx];
         vels = presetVels[idx];
+        // swap in this preset's divisions (rowDiv is the live view of them)
+        for (const k in rowDiv) delete rowDiv[k];
+        Object.assign(rowDiv, presetDivs[idx]);
         STEPS = presetSteps[idx];           // this preset's loop length
         currentPreset = idx;
         cuedPreset = null;
@@ -1598,8 +1696,14 @@
                 ev.stopPropagation();
                 const cur = rowDiv[r.key] || 1;
                 const i = DIVISIONS.indexOf(cur);
-                rowDiv[r.key] = DIVISIONS[(i + 1) % DIVISIONS.length];
-                paintDiv(); saveRowConfig();
+                const next = DIVISIONS[(i + 1) % DIVISIONS.length];
+                rowDiv[r.key] = next;
+                // divisions live with the preset, so store it there
+                if (presetDivs && currentPreset >= 0) {
+                    presetDivs[currentPreset][r.key] = next;
+                    savePresetGrids();
+                }
+                paintDiv();
             });
             paintDiv();
 
@@ -1691,7 +1795,17 @@
         c.classList.toggle('vel30', !!state && v === 30);
     }
 
+    // repaint the division badges from the current preset's divisions
+    function refreshDivBadges() {
+        document.querySelectorAll('.divbadge[data-key]').forEach(el => {
+            const d = rowDiv[el.dataset.key] || 1;
+            el.textContent = d === 1 ? '1' : '½¼⅛'[[2,4,8].indexOf(d)];
+            el.classList.toggle('active', d > 1);
+        });
+    }
+
     function renderCells() {
+        refreshDivBadges();
         allRows().forEach(r => {
             for (let i = 0; i < MAX_STEPS; i++) {
                 const c = cellEls[r.key][i];
@@ -2013,6 +2127,10 @@
             const el = document.getElementById('humanize');
             if (el) { el.value = Math.round(humanize*100); document.getElementById('humanizeVal').textContent = Math.round(humanize*100); }
         }
+        if (s.divs) {
+            for (const k in rowDiv) delete rowDiv[k];
+            allRows().forEach(r => rowDiv[r.key] = (typeof s.divs[r.key] === 'number') ? s.divs[r.key] : 1);
+        }
         if (typeof s.velRandom === 'number') {
             velRandom = s.velRandom;
             const el = document.getElementById('velRandom');
@@ -2053,7 +2171,7 @@
             pch[r.key] = (probs[r.key] || []).slice();
             pvl[r.key] = (vels[r.key] || []).slice();
         });
-        return { name: '', bpm, steps: STEPS, pattern: pat, chance: pch, velocity: pvl,
+        return { name: '', bpm, steps: STEPS, pattern: pat, chance: pch, velocity: pvl, divs: { ...rowDiv },
                  humanize, velRandom,
                  eq: { ...eqGains }, fx: { ...fx }, fxPreset: activeFxPreset, shortLen: { ...shortLen }, sampVol: { ...sampVol }, fadeIn: { ...fadeIn }, fadeOut: { ...fadeOut } };
     }
@@ -2082,6 +2200,10 @@
                 vels[key] = arr;
             }
         }
+        if (s.divs) {
+            for (const k in rowDiv) delete rowDiv[k];
+            allRows().forEach(r => rowDiv[r.key] = (typeof s.divs[r.key] === 'number') ? s.divs[r.key] : 1);
+        }
         if (typeof s.velRandom === 'number') {
             velRandom = s.velRandom;
             document.getElementById('velRandom').value = Math.round(velRandom * 100);
@@ -2109,6 +2231,7 @@
             presetGrids[slot] = grid;
             presetProbs[slot] = probs;
             presetVels[slot]  = vels;
+            if (presetDivs) presetDivs[slot] = { ...rowDiv };
             presetSteps[slot] = STEPS;
             currentPreset = slot;
             savePresetGrids();
@@ -2192,7 +2315,7 @@
             app: 'sixteen', version: 2, exported: new Date().toISOString(),
             presets: {
                 grids: presetGrids, probs: presetProbs,
-                vels: presetVels, steps: presetSteps,
+                vels: presetVels, divs: presetDivs, steps: presetSteps,
             },
             rows: ROWS,
             rowSource, synthP, rowDiv,
@@ -2265,6 +2388,7 @@
                     if (P2.grids) presetGrids = P2.grids;
                     if (P2.probs) presetProbs = P2.probs;
                     if (P2.vels)  presetVels  = P2.vels;
+                    if (P2.divs)  presetDivs  = P2.divs;
                     if (P2.steps) presetSteps = P2.steps;
                     // pad any missing lanes so a row added later can't break it
                     const fix = (coll, fill) => coll && coll.forEach(obj => ROWS.forEach(r => {
@@ -2547,8 +2671,12 @@
         document.getElementById('synthType').value = p.type;
         document.getElementById('spWave').value = p.wave;
         setv('spPitch',    Math.round(p.pitch));
-        setv('spPitchEnv', Math.round(p.pitchEnv * 100));
+        setv('spPitchEnv', Math.round((p.pitchEnv || 0) * 100));
+        setv('spPitchTime',Math.round((p.pitchTime || 0.05) * 1000));
         setv('spDecay',    Math.round(p.decay * 100));
+        setv('spHold',     Math.round((p.hold || 0) * 100));
+        setv('spDrive',    Math.round((p.drive || 0) * 100));
+        setv('spSub',      Math.round((p.sub || 0) * 100));
         setv('spTone',     Math.round(p.tone * 100));
         setv('spNoise',    Math.round(p.noise * 100));
         setv('spOsc',      Math.round(p.osc * 100));
@@ -2605,6 +2733,10 @@
     synthCtl('spPitch',    v => synthP[selectedRow].pitch = v,    false);
     synthCtl('spPitchEnv', v => synthP[selectedRow].pitchEnv = v, true);
     synthCtl('spDecay',    v => synthP[selectedRow].decay = v,    true);
+    synthCtl('spPitchTime',v => synthP[selectedRow].pitchTime = v / 1000, false);
+    synthCtl('spHold',     v => synthP[selectedRow].hold = v,     true);
+    synthCtl('spDrive',    v => synthP[selectedRow].drive = v,    true);
+    synthCtl('spSub',      v => synthP[selectedRow].sub = v,      true);
     synthCtl('spTone',     v => synthP[selectedRow].tone = v,     true);
     synthCtl('spNoise',    v => synthP[selectedRow].noise = v,    true);
     synthCtl('spOsc',      v => synthP[selectedRow].osc = v,      true);
@@ -2637,6 +2769,7 @@
             if (!coll) return;
             coll.forEach(obj => obj[key] = new Array(MAX_STEPS).fill(ci === 0 ? 0 : 100));
         });
+        if (presetDivs) presetDivs.forEach(obj => obj[key] = 1);
         grid[key]  = grid[key]  || new Array(MAX_STEPS).fill(0);
         probs[key] = probs[key] || new Array(MAX_STEPS).fill(100);
         vels[key]  = vels[key]  || new Array(MAX_STEPS).fill(100);
@@ -2655,6 +2788,7 @@
         [presetGrids, presetProbs, presetVels].forEach(coll => {
             if (coll) coll.forEach(obj => delete obj[key]);
         });
+        if (presetDivs) presetDivs.forEach(obj => delete obj[key]);
         delete grid[key]; delete probs[key]; delete vels[key];
         saveRowConfig(); savePresetGrids();
         rebuildGrid();
@@ -2793,6 +2927,7 @@
         [presetGrids, presetProbs, presetVels].forEach((coll, ci) => {
             if (coll) coll.forEach(obj => obj[key] = new Array(MAX_STEPS).fill(ci === 0 ? 0 : 100));
         });
+        if (presetDivs) presetDivs.forEach(obj => obj[key] = 1);
         grid[key]  = grid[key]  || new Array(MAX_STEPS).fill(0);
         probs[key] = probs[key] || new Array(MAX_STEPS).fill(100);
         vels[key]  = vels[key]  || new Array(MAX_STEPS).fill(100);
@@ -2811,6 +2946,7 @@
         [presetGrids, presetProbs, presetVels].forEach(coll => {
             if (coll) coll.forEach(obj => delete obj[key]);
         });
+        if (presetDivs) presetDivs.forEach(obj => delete obj[key]);
         delete grid[key]; delete probs[key]; delete vels[key];
         saveChords(); savePresetGrids();
         rebuildGrid();
