@@ -17,9 +17,22 @@
         --panel-edge:   #333;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    html { background-color: var(--bg-color); }
+    html {
+        background-color: var(--bg-color);
+        /* lock the page horizontally: only vertical scrolling is ever wanted,
+           otherwise dragging across the step grid pans the whole view */
+        overflow-x: hidden;
+        width: 100%;
+        touch-action: pan-y;
+        overscroll-behavior-x: none;
+    }
     body {
         margin: 0; padding: 20px 14px 48px;
+        overflow-x: hidden;
+        width: 100%;
+        max-width: 100%;
+        touch-action: pan-y;
+        overscroll-behavior-x: none;
         background-color: var(--bg-color);
         color: var(--text-color);
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -74,6 +87,7 @@
         -webkit-appearance: none; appearance: none;
         width: 100%; height: 4px; border-radius: 2px; margin-top: 8px;
         background: #444; outline: none;
+        touch-action: none;    /* sliders need horizontal drags of their own */
     }
     input[type=range]::-webkit-slider-thumb {
         -webkit-appearance: none; appearance: none;
@@ -135,16 +149,19 @@
     }
     .beatbar .nums span:nth-child(4n+1) { color: var(--accent); }
 
-    .grid { display: flex; flex-direction: column; gap: 6px; }
+    .grid { display: flex; flex-direction: column; gap: 6px;
+            touch-action: pan-y; overscroll-behavior: contain; }
     .row { display: flex; align-items: center; }
     .row .name {
         width: 62px; flex-shrink: 0;
         font-size: 11px; color: #aaa; text-align: right;
         padding-right: 8px; font-weight: bold;
     }
-    .steps { display: flex; flex: 1; }
+    .steps { display: flex; flex: 1; touch-action: pan-y; }
     .step {
         flex: 1; height: 26px;
+        touch-action: manipulation;   /* tap only — don't let drags pan the page */
+        user-select: none;
         background-color: var(--step-bg);
         border-radius: 3px; margin: 0 1px; min-width: 2px;
         cursor: pointer;
@@ -339,6 +356,16 @@
     }
     .learn-row .clearBtn:hover { color: var(--accent); border-color: #5c2a28; }
     .midi-hint { font-size: 11px; color: #555; margin-top: 10px; line-height: 1.5; }
+
+    /* collapsible panels */
+    .collapser { cursor: pointer; user-select: none; margin-bottom: 0; }
+    .collapser .caret { display: inline-block; transition: transform .15s ease; color: #666; }
+    .panel:not(.collapsed) .collapser .caret { transform: rotate(90deg); }
+    .panel:not(.collapsed) .collapser { margin-bottom: 12px; }
+    .panel.collapsed .collapse-body { display: none; }
+
+    /* tap tempo button flashes as you tap */
+    #tapBtn.flash { background: var(--accent); color: #fff; border-color: var(--accent); }
     .midi-hint b { color: #888; }
 
     /* ---- EQ ---- */
@@ -348,6 +375,7 @@
     .eq-slider {
         -webkit-appearance: none; appearance: none;
         width: 100%; height: 4px; border-radius: 2px; outline: none;
+        touch-action: none;    /* sliders need their own horizontal drags */
         background: linear-gradient(#666 0 0) no-repeat center/2px 12px, #444;
     }
     .eq-slider::-webkit-slider-thumb {
@@ -430,6 +458,7 @@
             </div>
             <input type="range" id="bpm" min="60" max="220" value="120">
         </div>
+        <button class="clear-btn" id="tapBtn" title="Tap four times to set the tempo">Tap</button>
         <button class="clear-btn" id="clearBtn">Clear</button>
     </div>
 
@@ -722,11 +751,16 @@
     </div>
 
     <!-- ---- MIDI: learn a foot controller ---- -->
-    <div class="panel" id="midiPanel">
-        <div class="panel-title">MIDI Foot Control <span id="midiState" class="midi-state">off</span></div>
+    <div class="panel collapsed" id="midiPanel">
+        <div class="panel-title collapser" id="midiToggle">
+            <span class="caret">▸</span> MIDI Foot Control
+            <span id="midiState" class="midi-state">off</span>
+        </div>
+        <div class="collapse-body">
         <button class="mini-btn" id="midiEnable" style="width:100%; margin-bottom:10px;">Enable MIDI</button>
         <div class="learn-list" id="learnList"></div>
         <div class="midi-hint">Tap <b>Learn</b>, then press the pedal you want to assign. Presets cue and switch at the end of the sequence, same as tapping them.</div>
+        </div>
     </div>
 
     <!-- ---- 3-band master EQ ---- -->
@@ -3104,6 +3138,39 @@
 
 
     // Effect presets recall the whole fx object. Names lean into the vibes asked for.
+    /* ================= TAP TEMPO ================= */
+    // Average the gaps between recent taps. Gaps longer than 2s start a new
+    // measurement, so you can just start tapping again whenever.
+    let tapTimes = [];
+    document.getElementById('tapBtn').addEventListener('click', () => {
+        const now = performance.now();
+        if (tapTimes.length && now - tapTimes[tapTimes.length - 1] > 2000) tapTimes = [];
+        tapTimes.push(now);
+        if (tapTimes.length > 5) tapTimes.shift();      // keep the last few taps
+        const btn = document.getElementById('tapBtn');
+        btn.classList.add('flash');
+        setTimeout(() => btn.classList.remove('flash'), 90);
+
+        if (tapTimes.length >= 2) {
+            let sum = 0;
+            for (let i = 1; i < tapTimes.length; i++) sum += tapTimes[i] - tapTimes[i - 1];
+            const avg = sum / (tapTimes.length - 1);
+            const newBpm = Math.round(60000 / avg);
+            if (newBpm >= 40 && newBpm <= 300) {
+                bpm = Math.max(60, Math.min(220, newBpm));
+                document.getElementById('bpm').value = bpm;
+                document.getElementById('bpmVal').textContent = bpm;
+                if (audioCtx) { syncDelayTime(); applyFx(); }
+                saveGlobal();
+            }
+        }
+    });
+
+    /* ================= COLLAPSIBLE PANELS ================= */
+    document.getElementById('midiToggle').addEventListener('click', () => {
+        document.getElementById('midiPanel').classList.toggle('collapsed');
+    });
+
     /* ================= EFFECTS ================= */
     const FX_PRESETS = [
         { name: 'Clean',    fx: { filterOn:0, filterFreq:1.0, filterQ:0.15, crush:0, delayMix:0,    delayTime:0.23, delayFb:0.35, reverbMix:0 } },
