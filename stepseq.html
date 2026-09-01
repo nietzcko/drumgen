@@ -14,7 +14,7 @@
         --step-active:  #e53935;
         --step-current: #fff;
         --panel:        #222;
-        --chord-c:      #8f6fe0;
+        --chord-c:      #e53935;
         --panel-edge:   #333;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -238,20 +238,20 @@
     .grid.velmode .steps .step:not(.disabled):hover { outline: 1px solid var(--accent); }
 
     /* ---- chord rows: same grid, different colour ---- */
-    .row.chordrow .name { color: #a68ce8; }
-    .row.chordrow .name.sel { color: #c9b6ff; }
-    .step.chord { background-color: #8f6fe0; }
+    .row.chordrow .name { color: #e06a67; }
+    .row.chordrow .name.sel { color: #ff9c99; }
+    .step.chord { background-color: var(--chord-c); }
     .step.chord.ratchet { color: #fff; }
     /* a subtle divider above the chord block */
     .row.chordrow.first { margin-top: 8px; border-top: 1px solid #2e2e2e; padding-top: 8px; }
     /* chord rows: the row label IS the chord name, and selects it for editing */
     .name.chordlabel {
-        color: #a68ce8; font-weight: bold; cursor: pointer;
+        color: #e06a67; font-weight: bold; cursor: pointer;
     }
-    .name.chordlabel:hover { color: #c9b6ff; }
+    .name.chordlabel:hover { color: #ff9c99; }
     .name.chordlabel.sel { color: #fff; }
-    .name.chordlabel.sel::after { content: ' \2039'; color: #8f6fe0; }
-    .chord-notes { font-size: 10px; color: #8f6fe0; font-weight: normal;
+    .name.chordlabel.sel::after { content: ' \2039'; color: var(--chord-c); }
+    .chord-notes { font-size: 10px; color: var(--chord-c); font-weight: normal;
                    text-transform: none; letter-spacing: 0; margin-left: 8px; }
 
     /* per-row time-division badge */
@@ -441,7 +441,7 @@
         background: #1c1c1c; border: 1px solid #000; border-radius: 0 0 3px 3px;
         cursor: pointer; z-index: 2;
     }
-    .bkey.on { background: var(--chord-c); border-color: var(--chord-c); }
+    .bkey.on { background: var(--chord-c); border: 2px solid #000; }
     .bkey.root { box-shadow: inset 0 0 0 2px #fff; }
 
     /* sample / synth source toggle */
@@ -982,7 +982,7 @@
         'Power 5':    [0, 7],
     };
     const KEYS_SPAN = 24;              // two octaves on the picker keyboard
-    const CHORD_COLOR = '#8f6fe0';
+    const CHORD_COLOR = '#e53935';
 
     let chordOct = 3;                  // base octave of the keyboard
 
