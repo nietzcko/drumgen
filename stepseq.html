@@ -14,6 +14,7 @@
         --step-active:  #e53935;
         --step-current: #fff;
         --panel:        #222;
+        --chord-c:      #8f6fe0;
         --panel-edge:   #333;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -420,6 +421,29 @@
     }
     .samp-hint { font-size: 11px; color: #555; margin-top: 8px; }
 
+    /* ---- chord picker keyboard ---- */
+    .keyboard {
+        position: relative; height: 96px; margin: 12px 0 4px;
+        display: flex; user-select: none;
+        background: #141414; border: 1px solid var(--panel-edge);
+        border-radius: 8px; padding: 6px; overflow: hidden;
+    }
+    .wkey {
+        position: relative; flex: 1; margin: 0 1px;
+        background: #d8d8d8; border-radius: 0 0 4px 4px; cursor: pointer;
+        display: flex; align-items: flex-end; justify-content: center;
+        font-size: 8px; color: #888; padding-bottom: 3px;
+    }
+    .wkey.on { background: var(--chord-c); color: #fff; }
+    .wkey.root { box-shadow: inset 0 0 0 2px #fff; }
+    .bkey {
+        position: absolute; top: 6px; width: 5.4%; height: 58%;
+        background: #1c1c1c; border: 1px solid #000; border-radius: 0 0 3px 3px;
+        cursor: pointer; z-index: 2;
+    }
+    .bkey.on { background: var(--chord-c); border-color: var(--chord-c); }
+    .bkey.root { box-shadow: inset 0 0 0 2px #fff; }
+
     /* sample / synth source toggle */
     .src-toggle { display: flex; gap: 8px; margin-bottom: 12px; }
     .src-btn {
@@ -469,18 +493,6 @@
         <input type="range" id="stepCount" min="1" max="16" value="16">
         <span class="val" id="stepCountVal">16</span>
         <span class="hint" id="stepHint"></span>
-    </div>
-
-    <div class="steps-ctl" id="chordBar">
-        <label>Chords</label>
-        <select id="rootSel" class="synth-sel" style="flex:0 0 70px;"></select>
-        <select id="scaleSel" class="synth-sel" style="flex:0 0 110px;"></select>
-        <select id="voiceSel" class="synth-sel" style="flex:0 0 90px;">
-            <option value="pad">Pad</option>
-            <option value="pluck">Pluck</option>
-            <option value="bass">Bass</option>
-            <option value="stab">Stab</option>
-        </select>
     </div>
 
     <div class="mode-row">
@@ -642,89 +654,85 @@
 
     <div class="panel" id="chordPanel" style="display:none;">
         <div class="panel-title">
-            Chord: <span id="chordTitle" class="samp-name">Chord 1</span>
+            Chord: <span id="chordTitle" class="samp-name">C</span>
             <span id="chordNotes" class="chord-notes"></span>
             <button class="mini-btn" id="chordAudition" style="margin-left:auto; padding:4px 10px;">▶ Test</button>
         </div>
 
         <div class="samp-ctl">
-            <label>Degree</label>
-            <select id="cDeg" class="synth-sel"></select>
-            <span class="val" id="cDegVal"></span>
-        </div>
-        <div class="samp-ctl">
-            <label>Type</label>
-            <select id="cType" class="synth-sel"></select>
-        </div>
-        <div class="samp-ctl">
-            <label>Inversion</label>
-            <input type="range" id="cInv" min="0" max="3" value="0">
-            <span class="val" id="cInvVal">0</span>
-        </div>
-        <div class="samp-ctl">
-            <label>Octave</label>
-            <input type="range" id="cOct" min="-2" max="2" value="0">
-            <span class="val" id="cOctVal">0</span>
-        </div>
-        <div class="samp-ctl">
-            <label>Spread</label>
-            <input type="range" id="cSpread" min="0" max="1" value="0">
-            <span class="val" id="cSpreadVal">0</span>
+            <label>Root</label>
+            <select id="cRoot" class="synth-sel"></select>
+            <select id="cMode" class="synth-sel"></select>
         </div>
 
-        <div class="panel-title" style="margin-top:16px;">Sound (all chords)</div>
-        <div class="samp-ctl">
-            <label>Preset</label>
-            <select id="voiceSel2" class="synth-sel"></select>
-        </div>
-        <div class="samp-ctl">
-            <label>Wave</label>
-            <select id="cWave" class="synth-sel">
-                <option value="sine">Sine</option>
-                <option value="triangle">Triangle</option>
-                <option value="square">Square</option>
-                <option value="sawtooth">Saw</option>
-            </select>
-        </div>
-        <div class="samp-ctl">
-            <label>Cutoff</label>
-            <input type="range" id="cCut" min="200" max="8000" value="2600">
-            <span class="val" id="cCutVal">2600</span>
-        </div>
-        <div class="samp-ctl">
-            <label>Reso</label>
-            <input type="range" id="cQ" min="0" max="100" value="6">
-            <span class="val" id="cQVal">6</span>
-        </div>
-        <div class="samp-ctl">
-            <label>Attack</label>
-            <input type="range" id="cAtk" min="0" max="100" value="12">
-            <span class="val" id="cAtkVal">12</span>
-        </div>
-        <div class="samp-ctl">
-            <label>Release</label>
-            <input type="range" id="cRel" min="2" max="150" value="55">
-            <span class="val" id="cRelVal">55</span>
-        </div>
-        <div class="samp-ctl">
-            <label>Length</label>
-            <input type="range" id="cLen" min="10" max="200" value="100">
-            <span class="val" id="cLenVal">100</span>
-        </div>
-        <div class="samp-ctl">
-            <label>Strum</label>
-            <input type="range" id="cStrum" min="0" max="100" value="0">
-            <span class="val" id="cStrumVal">0</span>
-        </div>
-        <div class="samp-ctl">
-            <label>Volume</label>
-            <input type="range" id="cVol" min="0" max="60" value="16">
-            <span class="val" id="cVolVal">16</span>
-        </div>
+        <div class="keyboard" id="chordKeys"></div>
+        <div class="samp-hint">Tap keys to add or remove notes. Changing a note switches the chord to Custom.</div>
 
         <div class="row-mgmt">
             <button class="mini-btn" id="addChord">+ Add chord row</button>
             <button class="mini-btn" id="removeChord">Remove this chord</button>
+        </div>
+    </div>
+
+    <!-- ---- one shared sound engine for all chord rows ---- -->
+    <div class="panel collapsed" id="chordSoundPanel">
+        <div class="panel-title collapser" id="chordSoundToggle">
+            <span class="caret">▸</span> Chord Sound <span class="midi-state" id="chordVoiceTag">pad</span>
+        </div>
+        <div class="collapse-body">
+            <div class="samp-ctl">
+                <label>Preset</label>
+                <select id="voiceSel2" class="synth-sel"></select>
+            </div>
+            <div class="samp-ctl">
+                <label>Wave</label>
+                <select id="cWave" class="synth-sel">
+                    <option value="sine">Sine</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="square">Square</option>
+                    <option value="sawtooth">Saw</option>
+                </select>
+            </div>
+            <div class="samp-ctl">
+                <label>Octave</label>
+                <input type="range" id="cOctave" min="1" max="6" value="3">
+                <span class="val" id="cOctaveVal">3</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Cutoff</label>
+                <input type="range" id="cCut" min="200" max="8000" value="2600">
+                <span class="val" id="cCutVal">2600</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Reso</label>
+                <input type="range" id="cQ" min="0" max="100" value="6">
+                <span class="val" id="cQVal">6</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Attack</label>
+                <input type="range" id="cAtk" min="0" max="100" value="12">
+                <span class="val" id="cAtkVal">12</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Release</label>
+                <input type="range" id="cRel" min="2" max="150" value="55">
+                <span class="val" id="cRelVal">55</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Length</label>
+                <input type="range" id="cLen" min="10" max="200" value="100">
+                <span class="val" id="cLenVal">100</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Strum</label>
+                <input type="range" id="cStrum" min="0" max="100" value="0">
+                <span class="val" id="cStrumVal">0</span>
+            </div>
+            <div class="samp-ctl">
+                <label>Volume</label>
+                <input type="range" id="cVol" min="0" max="60" value="16">
+                <span class="val" id="cVolVal">16</span>
+            </div>
         </div>
     </div>
 
@@ -745,6 +753,7 @@
         <div class="setup-list" id="setupList"></div>
         <div class="panel-row" style="margin-top:10px;">
             <button class="mini-btn" id="exportSetups">Export all</button>
+            <button class="mini-btn" id="exportZip">Export ZIP</button>
             <button class="mini-btn" id="importBtn">Import all</button>
             <input type="file" id="importFile" accept="application/json" style="display:none;">
         </div>
@@ -952,89 +961,82 @@
        fires the whole chord. A few rows give you a backing progression without
        turning the app into a workstation.
     */
-    const SCALES = {
-        'Minor':          [0, 2, 3, 5, 7, 8, 10],
-        'Major':          [0, 2, 4, 5, 7, 9, 11],
-        'Dorian':         [0, 2, 3, 5, 7, 9, 10],
-        'Phrygian':       [0, 1, 3, 5, 7, 8, 10],
-        'Harmonic Minor': [0, 2, 3, 5, 7, 8, 11],
-    };
     const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-    const ROMAN = ['I','II','III','IV','V','VI','VII'];
-
-    let curScale = 'Minor';
-    let curRoot  = 0;                     // 0 = C
-    let chordOct = 3;                     // base octave for the chords
-    let chordVoice = 'pad';               // 'pad' | 'pluck' | 'bass' | 'stab'
+    let chordVoice = 'pad';               // shared chord sound preset
 
     // Each chord row carries its own settings: which scale degree, the chord
     // TYPE (triad, 7th, sus, etc), an INVERSION, and an octave offset. Chords are
     // built from the scale, so whatever you pick stays in key.
-    const CHORD_TYPES = {
-        'triad':  [0, 2, 4],           // root, 3rd, 5th
-        '7th':    [0, 2, 4, 6],
-        '9th':    [0, 2, 4, 6, 8],
-        'sus4':   [0, 3, 4],
-        'sus2':   [0, 1, 4],
-        '5th':    [0, 4],              // power chord
-        'octave': [0, 7],
-        '6th':    [0, 2, 4, 5],
+    // Chord MODES: semitone offsets from the root. Picking a root + mode fills
+    // the keyboard; clicking individual keys after that switches to "custom".
+    const CHORD_MODES = {
+        'Major':      [0, 4, 7],
+        'Minor':      [0, 3, 7],
+        'Major 7':    [0, 4, 7, 11],
+        'Minor 7':    [0, 3, 7, 10],
+        'Dominant 7': [0, 4, 7, 10],
+        'Sus2':       [0, 2, 7],
+        'Sus4':       [0, 5, 7],
+        'Diminished': [0, 3, 6],
+        'Augmented':  [0, 4, 8],
+        'Power 5':    [0, 7],
     };
+    const KEYS_SPAN = 24;              // two octaves on the picker keyboard
     const CHORD_COLOR = '#8f6fe0';
 
+    let chordOct = 3;                  // base octave of the keyboard
+
     // Chord rows behave like drum rows: same grid, same steps, same triggering.
-    // Mutable so rows can be added and removed.
     let CHORD_ROWS = [
         { key: 'chord1', name: 'Chord 1', chord: true },
         { key: 'chord2', name: 'Chord 2', chord: true },
         { key: 'chord3', name: 'Chord 3', chord: true },
         { key: 'chord4', name: 'Chord 4', chord: true },
     ];
-    // per-chord-row settings, keyed by row key
+
+    // Per-row: { root, mode, notes:[key indices 0..23] }. `notes` is the truth —
+    // root/mode are just a quick way to fill it.
     const chordCfg = {};
+    function notesFor(root, mode) {
+        return (CHORD_MODES[mode] || CHORD_MODES.Major).map(iv => root + iv);
+    }
     function defaultChordCfg(i) {
-        const prog = [0, 5, 3, 4];      // i - VI - iv - v
-        return { deg: prog[i % prog.length], type: 'triad', inv: 0, oct: 0, spread: 0 };
+        const roots = [0, 8, 5, 7];    // C, G#, F, G
+        const modes = ['Minor', 'Major', 'Minor', 'Minor'];
+        const r = roots[i % roots.length], m = modes[i % modes.length];
+        return { root: r, mode: m, notes: notesFor(r, m) };
     }
     CHORD_ROWS.forEach((r, i) => chordCfg[r.key] = defaultChordCfg(i));
 
     function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
     function midiToName(m) { return NOTE_NAMES[((m % 12) + 12) % 12]; }
 
-    // Build the actual notes for a chord row from its config.
+    // key index (0..23) -> MIDI note
+    function keyToMidi(i) { return 12 * chordOct + i; }
+
     function chordNotes(key) {
-        const cfg = chordCfg[key] || defaultChordCfg(0);
-        const scale = SCALES[curScale];
-        const ivs = CHORD_TYPES[cfg.type] || CHORD_TYPES.triad;
-        let notes = ivs.map(iv => {
-            const d = cfg.deg + iv;
-            const oct = Math.floor(d / scale.length);
-            return 12 * (chordOct + cfg.oct + oct) + curRoot + scale[((d % scale.length) + scale.length) % scale.length];
-        });
-        // inversion: move the lowest note(s) up an octave
-        for (let i = 0; i < cfg.inv; i++) {
-            const lowest = notes.shift();
-            notes.push(lowest + 12);
-        }
-        // spread: lift the top note another octave for a wider voicing
-        if (cfg.spread) notes[notes.length - 1] += 12;
-        return notes.sort((a, b) => a - b);
+        const cfg = chordCfg[key];
+        if (!cfg || !cfg.notes.length) return [];
+        return cfg.notes.slice().sort((a, b) => a - b).map(keyToMidi);
     }
 
+    // The chord's displayed name. Normally root + mode; if the root key has been
+    // switched off, the lowest remaining note names the chord instead.
     function chordLabel(key) {
-        const cfg = chordCfg[key] || defaultChordCfg(0);
-        const scale = SCALES[curScale];
-        const deg = ((cfg.deg % scale.length) + scale.length) % scale.length;
-        const root = (curRoot + scale[deg]) % 12;
-        const third = ((scale[(deg + 2) % scale.length] - scale[deg]) % 12 + 12) % 12;
-        let q = (third === 3) ? 'm' : '';
-        if (cfg.type === 'sus4') q = 'sus4';
-        else if (cfg.type === 'sus2') q = 'sus2';
-        else if (cfg.type === '5th') q = '5';
-        else if (cfg.type === '7th') q += '7';
-        else if (cfg.type === '9th') q += '9';
-        else if (cfg.type === '6th') q += '6';
-        return midiToName(root) + q;
+        const cfg = chordCfg[key];
+        if (!cfg || !cfg.notes.length) return '—';
+        const sorted = cfg.notes.slice().sort((a, b) => a - b);
+        const hasRoot = sorted.includes(cfg.root);
+        const nameIdx = hasRoot ? cfg.root : sorted[0];
+        const suffix = {
+            'Major': '', 'Minor': 'm', 'Major 7': 'maj7', 'Minor 7': 'm7',
+            'Dominant 7': '7', 'Sus2': 'sus2', 'Sus4': 'sus4',
+            'Diminished': 'dim', 'Augmented': 'aug', 'Power 5': '5',
+        }[cfg.mode];
+        // custom voicings just show the bass note
+        if (cfg.mode === 'Custom' || suffix === undefined || !hasRoot)
+            return midiToName(keyToMidi(nameIdx));
+        return midiToName(keyToMidi(nameIdx)) + suffix;
     }
 
     // ---- chord voice: detuned oscillators through a filter + envelope ----
@@ -2345,12 +2347,287 @@
         document.getElementById('curName').textContent = name;
     });
 
+
+    /* ================= ZIP EXPORT =================
+       Renders everything offline and packs it into one .zip:
+         loops/   – a mixed WAV of each preset's full loop. If any row uses a
+                    time division, the loop is extended so the whole cycle fits.
+         samples/ – a one-shot WAV of every synth voice and chord
+         midi/    – a Standard MIDI File per preset
+       Written by hand (no libraries): WAV encoder, SMF writer, and a store-only
+       ZIP container with CRC32.
+    */
+
+    // ---------- WAV ----------
+    function encodeWav(buffer) {
+        const nCh = buffer.numberOfChannels, sr = buffer.sampleRate;
+        const len = buffer.length;
+        const data = new ArrayBuffer(44 + len * nCh * 2);
+        const view = new DataView(data);
+        const wr = (o, str) => { for (let i = 0; i < str.length; i++) view.setUint8(o + i, str.charCodeAt(i)); };
+        wr(0, 'RIFF'); view.setUint32(4, 36 + len * nCh * 2, true); wr(8, 'WAVE');
+        wr(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+        view.setUint16(22, nCh, true); view.setUint32(24, sr, true);
+        view.setUint32(28, sr * nCh * 2, true); view.setUint16(32, nCh * 2, true);
+        view.setUint16(34, 16, true);
+        wr(36, 'data'); view.setUint32(40, len * nCh * 2, true);
+        let off = 44;
+        const chans = [];
+        for (let c = 0; c < nCh; c++) chans.push(buffer.getChannelData(c));
+        for (let i = 0; i < len; i++) {
+            for (let c = 0; c < nCh; c++) {
+                let v = Math.max(-1, Math.min(1, chans[c][i]));
+                view.setInt16(off, v < 0 ? v * 0x8000 : v * 0x7FFF, true);
+                off += 2;
+            }
+        }
+        return new Uint8Array(data);
+    }
+
+    // ---------- CRC32 + ZIP (store, no compression) ----------
+    let _crcTable = null;
+    function crc32(bytes) {
+        if (!_crcTable) {
+            _crcTable = new Uint32Array(256);
+            for (let n = 0; n < 256; n++) {
+                let c = n;
+                for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+                _crcTable[n] = c >>> 0;
+            }
+        }
+        let c = 0xFFFFFFFF;
+        for (let i = 0; i < bytes.length; i++) c = _crcTable[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+        return (c ^ 0xFFFFFFFF) >>> 0;
+    }
+    function makeZip(files) {          // files: [{name, data:Uint8Array}]
+        const enc = new TextEncoder();
+        const chunks = [], central = [];
+        let offset = 0;
+        files.forEach(f => {
+            const nameB = enc.encode(f.name);
+            const crc = crc32(f.data);
+            const lh = new Uint8Array(30 + nameB.length);
+            const lv = new DataView(lh.buffer);
+            lv.setUint32(0, 0x04034b50, true);
+            lv.setUint16(4, 20, true); lv.setUint16(6, 0, true);
+            lv.setUint16(8, 0, true);                       // stored
+            lv.setUint16(10, 0, true); lv.setUint16(12, 0, true);
+            lv.setUint32(14, crc, true);
+            lv.setUint32(18, f.data.length, true);
+            lv.setUint32(22, f.data.length, true);
+            lv.setUint16(26, nameB.length, true); lv.setUint16(28, 0, true);
+            lh.set(nameB, 30);
+            chunks.push(lh, f.data);
+
+            const ch = new Uint8Array(46 + nameB.length);
+            const cv = new DataView(ch.buffer);
+            cv.setUint32(0, 0x02014b50, true);
+            cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
+            cv.setUint16(8, 0, true); cv.setUint16(10, 0, true);
+            cv.setUint16(12, 0, true); cv.setUint16(14, 0, true);
+            cv.setUint32(16, crc, true);
+            cv.setUint32(20, f.data.length, true);
+            cv.setUint32(24, f.data.length, true);
+            cv.setUint16(28, nameB.length, true);
+            cv.setUint32(42, offset, true);
+            ch.set(nameB, 46);
+            central.push(ch);
+            offset += lh.length + f.data.length;
+        });
+        const centralSize = central.reduce((a, c) => a + c.length, 0);
+        const end = new Uint8Array(22);
+        const ev = new DataView(end.buffer);
+        ev.setUint32(0, 0x06054b50, true);
+        ev.setUint16(8, files.length, true); ev.setUint16(10, files.length, true);
+        ev.setUint32(12, centralSize, true); ev.setUint32(16, offset, true);
+        const all = chunks.concat(central, [end]);
+        const total = all.reduce((a, c) => a + c.length, 0);
+        const outB = new Uint8Array(total);
+        let p = 0;
+        all.forEach(c => { outB.set(c, p); p += c.length; });
+        return outB;
+    }
+
+    // ---------- MIDI ----------
+    function midiVarLen(n) {
+        const bytes = [n & 0x7F];
+        n >>= 7;
+        while (n > 0) { bytes.unshift((n & 0x7F) | 0x80); n >>= 7; }
+        return bytes;
+    }
+    // General MIDI drum notes for our rows
+    const GM_DRUM = {
+        kick: 36, snare: 38, snare_ghost: 38, hihat_closed: 42,
+        hihat_open: 46, crash: 49, ride: 51,
+    };
+    function buildMidi(presetIdx) {
+        const g = presetGrids[presetIdx], dvs = presetDivs[presetIdx];
+        const steps = presetSteps[presetIdx];
+        let maxDv = 1;
+        allRows().forEach(r => maxDv = Math.max(maxDv, (dvs && dvs[r.key]) || 1));
+        const totalSteps = steps * maxDv;
+        const TPQ = 480, tickPerStep = TPQ / 4;
+        // collect note events
+        const evts = [];   // {tick, on, note, chan, vel}
+        for (let gs = 0; gs < totalSteps; gs++) {
+            allRows().forEach(r => {
+                const dv = (dvs && dvs[r.key]) || 1;
+                let myStep = gs % steps;
+                if (dv > 1) { if (gs % dv !== 0) return; myStep = Math.floor(gs / dv) % steps; }
+                const n = g[r.key] && g[r.key][myStep];
+                if (!n) return;
+                const t = gs * tickPerStep;
+                if (r.chord) {
+                    chordNotes(r.key).forEach(m => {
+                        evts.push({ tick: t, on: 1, note: m, chan: 1, vel: 90 });
+                        evts.push({ tick: t + tickPerStep * dv * 3, on: 0, note: m, chan: 1, vel: 0 });
+                    });
+                } else {
+                    const note = GM_DRUM[r.key] || 41;
+                    for (let k = 0; k < n; k++) {
+                        const kt = t + Math.round(k * tickPerStep / n);
+                        evts.push({ tick: kt, on: 1, note, chan: 9, vel: 100 });
+                        evts.push({ tick: kt + 20, on: 0, note, chan: 9, vel: 0 });
+                    }
+                }
+            });
+        }
+        evts.sort((a, b) => a.tick - b.tick || a.on - b.on);
+        const track = [];
+        // tempo meta
+        const usPerBeat = Math.round(60000000 / bpm);
+        track.push(0x00, 0xFF, 0x51, 0x03,
+                   (usPerBeat >> 16) & 0xFF, (usPerBeat >> 8) & 0xFF, usPerBeat & 0xFF);
+        let last = 0;
+        evts.forEach(e => {
+            midiVarLen(e.tick - last).forEach(b => track.push(b));
+            last = e.tick;
+            track.push((e.on ? 0x90 : 0x80) | e.chan, e.note & 0x7F, e.vel & 0x7F);
+        });
+        track.push(0x00, 0xFF, 0x2F, 0x00);   // end of track
+        const head = [0x4D,0x54,0x68,0x64, 0,0,0,6, 0,0, 0,1, (TPQ>>8)&0xFF, TPQ&0xFF];
+        const tlen = track.length;
+        const trkHead = [0x4D,0x54,0x72,0x6B,
+                        (tlen>>>24)&0xFF,(tlen>>>16)&0xFF,(tlen>>>8)&0xFF,tlen&0xFF];
+        return new Uint8Array(head.concat(trkHead, track));
+    }
+
+    // ---------- offline rendering ----------
+    // Temporarily point the audio engine at an OfflineAudioContext so all the
+    // existing playback code can be reused to render a loop.
+    async function renderOffline(seconds, scheduleFn) {
+        const sr = 44100;
+        const realCtx = audioCtx, realBus = masterBus;
+        const realEq = [eqLow, eqMid, eqHigh, fxFilter, fxCrusher, dryGain,
+                        delayNode, delayFb, delayWet, reverbNode, reverbWet];
+        const oc = new OfflineAudioContext(2, Math.ceil(sr * seconds), sr);
+        audioCtx = oc;
+        buildEq();                       // rebuild the fx chain inside the offline ctx
+        activeSources = [];
+        try {
+            scheduleFn(oc);
+            const buf = await oc.startRendering();
+            return buf;
+        } finally {
+            audioCtx = realCtx; masterBus = realBus;
+            [eqLow, eqMid, eqHigh, fxFilter, fxCrusher, dryGain,
+             delayNode, delayFb, delayWet, reverbNode, reverbWet] = realEq;
+        }
+    }
+
+    // Render one preset's full loop (extended for any time divisions).
+    async function renderPresetLoop(idx) {
+        const savedIdx = currentPreset;
+        const savedGrid = grid, savedProbs = probs, savedVels = vels, savedSteps = STEPS;
+        const savedDiv = { ...rowDiv };
+        // switch state to the preset we're rendering
+        grid = presetGrids[idx]; probs = presetProbs[idx]; vels = presetVels[idx];
+        STEPS = presetSteps[idx];
+        for (const k in rowDiv) delete rowDiv[k];
+        Object.assign(rowDiv, presetDivs[idx]);
+
+        let maxDv = 1;
+        allRows().forEach(r => maxDv = Math.max(maxDv, rowDiv[r.key] || 1));
+        const total = STEPS * maxDv;
+        const stepDur = (60.0 / bpm) / 4;
+        const dur = total * stepDur + 2.0;      // tail for reverb/release
+
+        const buf = await renderOffline(dur, () => {
+            for (let gs = 0; gs < total; gs++) {
+                scheduleStep(gs % STEPS, 0.05 + gs * stepDur, gs);
+            }
+        });
+
+        grid = savedGrid; probs = savedProbs; vels = savedVels; STEPS = savedSteps;
+        for (const k in rowDiv) delete rowDiv[k];
+        Object.assign(rowDiv, savedDiv);
+        currentPreset = savedIdx;
+        return buf;
+    }
+
+    async function doZipExport() {
+        const btn = document.getElementById('exportZip');
+        const old = btn.textContent;
+        btn.textContent = 'Rendering…'; btn.disabled = true;
+        try {
+            await initAudio();
+            const files = [];
+            const safe = n => n.replace(/[^a-z0-9_\-]+/gi, '_');
+
+            // 1) loops
+            for (let i = 0; i < PRESETS.length; i++) {
+                const buf = await renderPresetLoop(i);
+                files.push({ name: 'loops/' + (i + 1) + '_' + safe(PRESETS[i].name) + '.wav',
+                             data: encodeWav(buf) });
+            }
+
+            // 2) one-shot samples of each drum voice + each chord
+            for (const r of ROWS) {
+                const buf = await renderOffline(2.2, (oc) => {
+                    if (rowSource[r.key] === 'synth' || !wavBuffers[r.key])
+                        playSynth(r.key, 0.9, 0.02, false);
+                    else playWav(r.key, 0.9, 0.02, false);
+                });
+                files.push({ name: 'samples/' + safe(r.name) + '.wav', data: encodeWav(buf) });
+            }
+            for (const r of CHORD_ROWS) {
+                const buf = await renderOffline(3.0, () => playChord(r.key, 0.02, 1.2, 1));
+                files.push({ name: 'samples/chord_' + safe(chordLabel(r.key)) + '.wav',
+                             data: encodeWav(buf) });
+            }
+
+            // 3) MIDI per preset
+            for (let i = 0; i < PRESETS.length; i++) {
+                files.push({ name: 'midi/' + (i + 1) + '_' + safe(PRESETS[i].name) + '.mid',
+                             data: buildMidi(i) });
+            }
+
+            // 4) the settings file too, so the zip is a complete backup
+            files.push({ name: 'sixteen-settings.json',
+                         data: new TextEncoder().encode(JSON.stringify(collectFullRig(), null, 2)) });
+
+            const zip = makeZip(files);
+            const blob = new Blob([zip], { type: 'application/zip' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'sixteen-' + new Date().toISOString().slice(0, 10) + '.zip';
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            alert('Export failed: ' + err.message);
+        } finally {
+            btn.textContent = old; btn.disabled = false;
+        }
+    }
+    document.getElementById('exportZip').addEventListener('click', doZipExport);
+
     /* ---- Export / import EVERYTHING: all four presets (patterns, chance,
        velocity, step counts), all saved setups, the global settings (EQ,
        effects, humanize), the per-sound sample & synth settings, the custom
        rows, and the MIDI bindings. One file = your whole rig. ---- */
-    document.getElementById('exportSetups').addEventListener('click', () => {
-        const full = {
+    function collectFullRig() {
+        return {
             app: 'sixteen', version: 2, exported: new Date().toISOString(),
             presets: {
                 grids: presetGrids, probs: presetProbs,
@@ -2361,7 +2638,12 @@
             global: collectGlobal(),
             setups: readSetups(),
             midi: midiBindings,
+            chords: { oct: chordOct, voice: chordVoice, rows: CHORD_ROWS,
+                      cfg: chordCfg, sound: chordSound },
         };
+    }
+    document.getElementById('exportSetups').addEventListener('click', () => {
+        const full = collectFullRig();
         const blob = new Blob([JSON.stringify(full, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -2873,49 +3155,86 @@
         });
     }
 
+    // Which of the 24 keys are black, and where the white ones sit.
+    const BLACK_SET = [1, 3, 6, 8, 10];
+    function isBlack(i) { return BLACK_SET.includes(i % 12); }
+
+    function buildKeyboard() {
+        const wrap = document.getElementById('chordKeys');
+        wrap.innerHTML = '';
+        const cfg = chordCfg[selChord];
+        // white keys first (they define the layout), black keys overlaid
+        const whites = [];
+        for (let i = 0; i < KEYS_SPAN; i++) if (!isBlack(i)) whites.push(i);
+        whites.forEach((i, wi) => {
+            const k = document.createElement('div');
+            k.className = 'wkey';
+            k.dataset.i = i;
+            if (cfg.notes.includes(i)) k.classList.add('on');
+            if (i === cfg.root) k.classList.add('root');
+            if (i % 12 === 0) k.textContent = 'C' + (chordOct + Math.floor(i / 12));
+            k.addEventListener('click', () => toggleKey(i));
+            wrap.appendChild(k);
+        });
+        // overlay the black keys at the boundaries between whites
+        const wWidth = 100 / whites.length;
+        for (let i = 0; i < KEYS_SPAN; i++) {
+            if (!isBlack(i)) continue;
+            const whitesBefore = whites.filter(w => w < i).length;
+            const k = document.createElement('div');
+            k.className = 'bkey';
+            k.dataset.i = i;
+            if (cfg.notes.includes(i)) k.classList.add('on');
+            if (i === cfg.root) k.classList.add('root');
+            k.style.left = 'calc(' + (whitesBefore * wWidth) + '% - 2.7% + 6px)';
+            k.addEventListener('click', (ev) => { ev.stopPropagation(); toggleKey(i); });
+            wrap.appendChild(k);
+        }
+    }
+
+    async function toggleKey(i) {
+        const cfg = chordCfg[selChord];
+        const at = cfg.notes.indexOf(i);
+        if (at >= 0) cfg.notes.splice(at, 1); else cfg.notes.push(i);
+        cfg.mode = 'Custom';                      // hand-edited voicing
+        document.getElementById('cMode').value = 'Custom';
+        saveChords();
+        buildKeyboard();
+        chordChanged();
+    }
+
     function selectChord(key) {
         selChord = key;
         if (!chordCfg[key]) chordCfg[key] = defaultChordCfg(0);
         const cfg = chordCfg[key];
-        const row = CHORD_ROWS.find(r => r.key === key);
-        // the two editors are mutually exclusive — only one is ever relevant
+        // the two editors are mutually exclusive
         document.getElementById('chordPanel').style.display = '';
         document.getElementById('samplePanel').style.display = 'none';
         document.querySelectorAll('.row .name.sel').forEach(n => n.classList.remove('sel'));
         document.getElementById('chordTitle').textContent = chordLabel(key);
 
-        // degree dropdown reflects the current scale length
-        const dsel = document.getElementById('cDeg');
-        dsel.innerHTML = '';
-        SCALES[curScale].forEach((_, i) => {
-            const o = document.createElement('option');
-            o.value = i; o.textContent = ROMAN[i] || (i + 1);
-            dsel.appendChild(o);
-        });
-        dsel.value = Math.min(cfg.deg, SCALES[curScale].length - 1);
+        const rsel = document.getElementById('cRoot');
+        if (!rsel.options.length) {
+            for (let i = 0; i < 12; i++) {
+                const o = document.createElement('option');
+                o.value = i; o.textContent = NOTE_NAMES[i];
+                rsel.appendChild(o);
+            }
+        }
+        rsel.value = cfg.root % 12;
 
-        const tsel = document.getElementById('cType');
-        if (!tsel.options.length) Object.keys(CHORD_TYPES).forEach(k => {
-            const o = document.createElement('option');
-            o.value = k; o.textContent = k; tsel.appendChild(o);
-        });
-        tsel.value = cfg.type;
+        const msel = document.getElementById('cMode');
+        if (!msel.options.length) {
+            Object.keys(CHORD_MODES).forEach(k => {
+                const o = document.createElement('option');
+                o.value = k; o.textContent = k; msel.appendChild(o);
+            });
+            const c = document.createElement('option');
+            c.value = 'Custom'; c.textContent = 'Custom'; msel.appendChild(c);
+        }
+        msel.value = cfg.mode;
 
-        const setv = (id, v) => {
-            const el = document.getElementById(id);
-            if (el) { el.value = v; const l = document.getElementById(id + 'Val'); if (l) l.textContent = v; }
-        };
-        setv('cInv', cfg.inv); setv('cOct', cfg.oct); setv('cSpread', cfg.spread);
-        document.getElementById('cDegVal').textContent = chordLabel(key);
-        // sound controls
-        setv('cCut', Math.round(chordSound.cut));
-        setv('cQ', Math.round(chordSound.q * 10));
-        setv('cAtk', Math.round(chordSound.atk * 100));
-        setv('cRel', Math.round(chordSound.rel * 100));
-        setv('cLen', Math.round(chordSound.len * 100));
-        setv('cStrum', Math.round((chordSound.strum || 0) * 100));
-        setv('cVol', Math.round(chordSound.vol * 100));
-        document.getElementById('cWave').value = chordSound.wave;
+        buildKeyboard();
         showChordNotes(key);
         refreshChordLabels();
     }
@@ -2928,7 +3247,7 @@
     async function chordChanged(retrigger) {
         saveChords();
         showChordNotes(selChord);
-        document.getElementById('cDegVal').textContent = chordLabel(selChord);
+        document.getElementById('chordTitle').textContent = chordLabel(selChord);
         refreshChordLabels();
         if (retrigger !== false) {
             await initAudio();
@@ -2936,28 +3255,35 @@
         }
     }
 
-    // ---- per-chord controls ----
-    document.getElementById('cDeg').addEventListener('change', e => {
-        chordCfg[selChord].deg = parseInt(e.target.value); chordChanged();
+    // root / mode dropdowns refill the keyboard
+    document.getElementById('cRoot').addEventListener('change', e => {
+        const cfg = chordCfg[selChord];
+        cfg.root = parseInt(e.target.value);
+        if (cfg.mode === 'Custom') cfg.mode = 'Major';
+        cfg.notes = notesFor(cfg.root, cfg.mode);
+        document.getElementById('cMode').value = cfg.mode;
+        buildKeyboard(); chordChanged();
     });
-    document.getElementById('cType').addEventListener('change', e => {
-        chordCfg[selChord].type = e.target.value; chordChanged();
+    document.getElementById('cMode').addEventListener('change', e => {
+        const cfg = chordCfg[selChord];
+        cfg.mode = e.target.value;
+        if (cfg.mode !== 'Custom') cfg.notes = notesFor(cfg.root, cfg.mode);
+        buildKeyboard(); chordChanged();
     });
-    [['cInv','inv'],['cOct','oct'],['cSpread','spread']].forEach(([id, prop]) => {
-        document.getElementById(id).addEventListener('input', e => {
-            const v = parseInt(e.target.value);
-            chordCfg[selChord][prop] = v;
-            document.getElementById(id + 'Val').textContent = v;
-            chordChanged();
-        });
+    document.getElementById('chordAudition').addEventListener('click', async () => {
+        await initAudio();
+        playChord(selChord, audioCtx.currentTime + 0.02, 0.8, 1);
     });
 
-    // ---- shared sound controls ----
+    /* ---- shared chord sound (one engine for every chord row) ---- */
     function soundCtl(id, apply) {
-        document.getElementById(id).addEventListener('input', e => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('input', e => {
             const v = parseInt(e.target.value);
             apply(v);
-            document.getElementById(id + 'Val').textContent = v;
+            const l = document.getElementById(id + 'Val');
+            if (l) l.textContent = v;
             saveChords();
         });
     }
@@ -2968,28 +3294,40 @@
     soundCtl('cLen',   v => chordSound.len = v / 100);
     soundCtl('cStrum', v => chordSound.strum = v / 100);
     soundCtl('cVol',   v => chordSound.vol = v / 100);
+    soundCtl('cOctave',v => { chordOct = v; buildKeyboard(); refreshChordLabels(); showChordNotes(selChord); });
     document.getElementById('cWave').addEventListener('change', e => {
         chordSound.wave = e.target.value; saveChords();
     });
-    document.getElementById('chordAudition').addEventListener('click', async () => {
-        await initAudio();
-        playChord(selChord, audioCtx.currentTime + 0.02, 0.8, 1);
+    document.getElementById('chordSoundToggle').addEventListener('click', () => {
+        document.getElementById('chordSoundPanel').classList.toggle('collapsed');
     });
 
-    // voice presets (both the top bar and the panel dropdown)
     function applyVoicePreset(name) {
         if (!CHORD_VOICES[name]) return;
         Object.assign(chordSound, CHORD_VOICES[name]);
         chordVoice = name;
+        const tag = document.getElementById('chordVoiceTag');
+        if (tag) tag.textContent = name;
+        // reflect the preset in the sound controls
+        const setv = (id, v) => {
+            const el = document.getElementById(id);
+            if (el) { el.value = v; const l = document.getElementById(id + 'Val'); if (l) l.textContent = v; }
+        };
+        setv('cCut', Math.round(chordSound.cut));
+        setv('cQ', Math.round(chordSound.q * 10));
+        setv('cAtk', Math.round(chordSound.atk * 100));
+        setv('cRel', Math.round(chordSound.rel * 100));
+        setv('cLen', Math.round(chordSound.len * 100));
+        setv('cStrum', Math.round((chordSound.strum || 0) * 100));
+        setv('cVol', Math.round(chordSound.vol * 100));
+        document.getElementById('cWave').value = chordSound.wave;
         saveChords();
-        selectChord(selChord);
     }
 
     /* ---- add / remove chord rows ---- */
     document.getElementById('addChord').addEventListener('click', () => {
         const key = 'chord_' + Date.now().toString(36);
-        const n = CHORD_ROWS.length + 1;
-        CHORD_ROWS.push({ key, name: 'Chord ' + n, chord: true });
+        CHORD_ROWS.push({ key, name: 'Chord ' + (CHORD_ROWS.length + 1), chord: true });
         chordCfg[key] = defaultChordCfg(CHORD_ROWS.length - 1);
         rowDiv[key] = 1;
         [presetGrids, presetProbs, presetVels].forEach((coll, ci) => {
@@ -3007,7 +3345,7 @@
         if (CHORD_ROWS.length <= 1) { alert('Keep at least one chord row.'); return; }
         const row = CHORD_ROWS.find(r => r.key === selChord);
         if (!row) return;
-        if (!confirm('Remove ' + row.name + '?')) return;
+        if (!confirm('Remove ' + chordLabel(row.key) + '?')) return;
         const key = row.key;
         CHORD_ROWS = CHORD_ROWS.filter(r => r.key !== key);
         delete chordCfg[key]; delete rowDiv[key];
@@ -3021,59 +3359,27 @@
         selectChord(CHORD_ROWS[0].key);
     });
 
-    /* ================= CHORD SETTINGS UI ================= */
-    (function buildChordBar() {
-        const rootSel = document.getElementById('rootSel');
-        NOTE_NAMES.forEach((n, i) => {
+    /* ================= CHORD PERSISTENCE ================= */
+    (function buildVoiceList() {
+        const sel = document.getElementById('voiceSel2');
+        if (!sel) return;
+        Object.keys(CHORD_VOICES).forEach(k => {
             const o = document.createElement('option');
-            o.value = i; o.textContent = n; rootSel.appendChild(o);
+            o.value = k; o.textContent = k.charAt(0).toUpperCase() + k.slice(1);
+            sel.appendChild(o);
         });
-        const scaleSel = document.getElementById('scaleSel');
-        Object.keys(SCALES).forEach(k => {
-            const o = document.createElement('option');
-            o.value = k; o.textContent = k; scaleSel.appendChild(o);
+        sel.addEventListener('change', async e => {
+            applyVoicePreset(e.target.value);
+            await initAudio();
+            playChord(selChord, audioCtx.currentTime + 0.02, 0.7, 1);
         });
-        // voice preset lists (top bar + panel)
-        [document.getElementById('voiceSel'), document.getElementById('voiceSel2')].forEach(sel => {
-            if (!sel) return;
-            sel.innerHTML = '';
-            Object.keys(CHORD_VOICES).forEach(k => {
-                const o = document.createElement('option');
-                o.value = k; o.textContent = k.charAt(0).toUpperCase() + k.slice(1);
-                sel.appendChild(o);
-            });
-            sel.addEventListener('change', async e => {
-                applyVoicePreset(e.target.value);
-                const other = (sel.id === 'voiceSel') ? document.getElementById('voiceSel2')
-                                                      : document.getElementById('voiceSel');
-                if (other) other.value = e.target.value;
-                await initAudio();
-                playChord(selChord, audioCtx.currentTime + 0.02, 0.7, 1);
-            });
-        });
-        rootSel.addEventListener('change', e => {
-            curRoot = parseInt(e.target.value); saveChords();
-            refreshChordLabels(); showChordNotes(selChord);
-        });
-        scaleSel.addEventListener('change', e => {
-            curScale = e.target.value;
-            const len = SCALES[curScale].length;
-            Object.values(chordCfg).forEach(c => c.deg = c.deg % len);
-            saveChords(); selectChord(selChord); refreshChordLabels();
-        });
-        setTimeout(() => {
-            rootSel.value = curRoot; scaleSel.value = curScale;
-            const v1 = document.getElementById('voiceSel'), v2 = document.getElementById('voiceSel2');
-            if (v1) v1.value = chordVoice;
-            if (v2) v2.value = chordVoice;
-        }, 0);
     })();
 
-    const CHORD_KEY = 'sixteen_chords_v2';
+    const CHORD_KEY = 'sixteen_chords_v3';
     function saveChords() {
         try {
             localStorage.setItem(CHORD_KEY, JSON.stringify({
-                scale: curScale, root: curRoot, oct: chordOct, voice: chordVoice,
+                oct: chordOct, voice: chordVoice,
                 rows: CHORD_ROWS, cfg: chordCfg, sound: chordSound,
             }));
         } catch (e) {}
@@ -3082,15 +3388,16 @@
         let s = null;
         try { s = JSON.parse(localStorage.getItem(CHORD_KEY)); } catch (e) {}
         if (!s) return;
-        if (s.scale && SCALES[s.scale]) curScale = s.scale;
-        if (typeof s.root === 'number') curRoot = s.root;
         if (typeof s.oct === 'number') chordOct = s.oct;
         if (s.voice && CHORD_VOICES[s.voice]) chordVoice = s.voice;
         if (Array.isArray(s.rows) && s.rows.length) {
             CHORD_ROWS = s.rows.filter(r => r && r.key && r.name);
             CHORD_ROWS.forEach(r => r.chord = true);
         }
-        if (s.cfg) { for (const k in s.cfg) chordCfg[k] = s.cfg[k]; }
+        if (s.cfg) for (const k in s.cfg) {
+            const c = s.cfg[k];
+            if (c && Array.isArray(c.notes)) chordCfg[k] = c;
+        }
         CHORD_ROWS.forEach((r, i) => { if (!chordCfg[r.key]) chordCfg[r.key] = defaultChordCfg(i); });
         if (s.sound) Object.assign(chordSound, s.sound);
     })();
