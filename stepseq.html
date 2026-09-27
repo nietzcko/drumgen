@@ -367,6 +367,7 @@
 
     /* tap tempo button flashes as you tap */
     #tapBtn.flash { background: var(--accent); color: #fff; border-color: var(--accent); }
+    #clearBtn.undo { color: #fff; background: var(--accent); border-color: var(--accent); }
     .midi-hint b { color: #888; }
 
     /* ---- EQ ---- */
@@ -475,16 +476,21 @@
             linear-gradient(90deg, #2c2c2c 1px, transparent 1px) 0 0 / 25% 25%,
             #1a1a1a;
         border: 1px solid var(--panel-edge); border-radius: 10px;
-        touch-action: none;             /* the pad owns its drags */
+        /* the pad lets vertical page scrolling through, so swiping past it on a
+           phone can't regenerate the grid. Only the puck itself grabs drags. */
+        touch-action: pan-y;
         cursor: crosshair; overflow: hidden;
     }
     .xy-puck {
         position: absolute; width: 26px; height: 26px; border-radius: 50%;
         background: var(--accent); border: 2px solid #fff;
-        transform: translate(-50%, -50%); pointer-events: none;
+        transform: translate(-50%, -50%);
         box-shadow: 0 0 14px rgba(229,57,53,.6);
         left: 50%; top: 50%;
+        touch-action: none; cursor: grab;
     }
+    /* a bigger invisible grab area around the puck for fingers */
+    .xy-puck::after { content: ''; position: absolute; inset: -16px; border-radius: 50%; }
     .xy-lbl {
         position: absolute; font-size: 9px; font-weight: bold; letter-spacing: 1px;
         text-transform: uppercase; color: #666;
@@ -528,20 +534,6 @@
         <button class="roll-btn" id="rollMode" title="Roll mode: tap steps to set a ratchet (2/3/4/6/8 hits inside one step)">ROLL</button>
         <button class="roll-btn" id="chanceMode" title="Chance mode: tap steps to set how often they fire">CHANCE</button>
         <button class="roll-btn" id="velMode" title="Velocity mode: tap steps to set how loud they hit">VEL</button>
-    </div>
-
-    <div class="steps-ctl">
-        <label>Human</label>
-        <input type="range" id="humanize" min="0" max="100" value="0">
-        <span class="val" id="humanizeVal">0</span>
-        <span class="hint">drift</span>
-    </div>
-
-    <div class="steps-ctl">
-        <label>Vel rnd</label>
-        <input type="range" id="velRandom" min="0" max="100" value="0">
-        <span class="val" id="velRandomVal">0</span>
-        <span class="hint">random</span>
     </div>
 
     <div class="panel collapsed" id="genPanel">
@@ -784,6 +776,7 @@
 
     <div class="foot">
         <div class="status">Preset <b id="curName">—</b><span class="cue" id="cueNote"></span>
+            <a id="renamePreset" style="color:#666; cursor:pointer; text-decoration:underline; margin-left:10px;">rename</a>
             <a id="resetPresets" style="color:#666; cursor:pointer; text-decoration:underline; margin-left:10px;">reset presets</a>
         </div>
         <div id="wavNote">samples: checking…</div>
@@ -816,6 +809,22 @@
         <div class="learn-list" id="learnList"></div>
         <div class="midi-hint">Tap <b>Learn</b>, then press the pedal you want to assign. Presets cue and switch at the end of the sequence, same as tapping them.</div>
         </div>
+    </div>
+
+    <!-- ---- feel: humanize + velocity randomness ---- -->
+    <div class="panel" id="feelPanel">
+        <div class="panel-title">Feel</div>
+        <div class="samp-ctl">
+            <label>Human</label>
+            <input type="range" id="humanize" min="0" max="100" value="0">
+            <span class="val" id="humanizeVal">0</span>
+        </div>
+        <div class="samp-ctl">
+            <label>Vel rnd</label>
+            <input type="range" id="velRandom" min="0" max="100" value="0">
+            <span class="val" id="velRandomVal">0</span>
+        </div>
+        <div class="samp-hint">Human drifts the timing and loudness; Vel rnd varies only the loudness.</div>
     </div>
 
     <!-- ---- 3-band master EQ ---- -->
@@ -1718,8 +1727,32 @@
         } catch (e) {}
     }
 
+    // ---- preset NAMES: renamable, persisted, and part of the full export ----
+    const PNAME_KEY = 'sixteen_presetnames_v1';
+    const FACTORY_NAMES = PRESETS.map(p => p.name);
+    (function loadPresetNames() {
+        let n = null;
+        try { n = JSON.parse(localStorage.getItem(PNAME_KEY)); } catch (e) {}
+        if (Array.isArray(n)) n.forEach((name, i) => {
+            if (PRESETS[i] && typeof name === 'string' && name.trim()) PRESETS[i].name = name;
+        });
+    })();
+    function savePresetNames() {
+        try { localStorage.setItem(PNAME_KEY, JSON.stringify(PRESETS.map(p => p.name))); } catch (e) {}
+    }
+    function renamePreset(idx) {
+        if (idx < 0 || !PRESETS[idx]) return;
+        const name = (prompt('Rename preset ' + (idx + 1) + ':', PRESETS[idx].name) || '').trim();
+        if (!name) return;
+        PRESETS[idx].name = name.slice(0, 20);
+        savePresetNames();
+        renderPresets();
+        if (idx === currentPreset) document.getElementById('curName').textContent = PRESETS[idx].name;
+    }
+
     function loadPreset(idx) {
         if (!presetGrids) loadPresetGrids();
+        if (typeof clearUndo !== 'undefined' && clearUndo) { clearUndo = null; setClearBtn(false); }
         // point the live grid at this preset's working copy (edits write through)
         grid = presetGrids[idx];
         probs = presetProbs[idx];
@@ -1921,9 +1954,10 @@
                 + (idx === cuedPreset ? ' cued' : '');
             b.innerHTML = `<div class="lamp"></div>
                 <div class="n">PRESET ${idx + 1}</div>
-                <div class="nm">${p.name}</div>
+                <div class="nm">${escapeHtml(p.name)}</div>
                 <div class="cue-txt">cued →</div>`;
             b.addEventListener('click', () => choosePreset(idx));
+            b.addEventListener('dblclick', (ev) => { ev.preventDefault(); renamePreset(idx); });
             wrap.appendChild(b);
         });
     }
@@ -2153,11 +2187,53 @@
         if (audioCtx) { syncDelayTime(); applyFx(); }
         saveGlobal();
     });
+    // CLEAR empties the CURRENT preset in place, so it stays selected and
+    // whatever you draw next is saved straight back into it. The chord
+    // voicings, sounds and step count are left alone; only the hits go.
+    // For a few seconds afterwards the button offers an undo.
+    let clearUndo = null, clearUndoTimer = null;
+    function setClearBtn(undoMode) {
+        const btn = document.getElementById('clearBtn');
+        btn.textContent = undoMode ? 'Undo' : 'Clear';
+        btn.classList.toggle('undo', undoMode);
+    }
     document.getElementById('clearBtn').addEventListener('click', () => {
-        grid = emptyGrid(); probs = fullProbs(); vels = fullVels(); renderCells();
-        document.getElementById('curName').textContent = 'Blank';
-        currentPreset = -1; cuedPreset = null; renderPresets();
+        const slot = currentPreset >= 0 ? currentPreset : 0;
+
+        // --- second tap within the window: undo ---
+        if (clearUndo && clearUndo.slot === slot) {
+            const u = clearUndo;
+            allRows().forEach(r => {
+                const k = r.key;
+                if (u.grid[k])  for (let i = 0; i < MAX_STEPS; i++) grid[k][i]  = u.grid[k][i];
+                if (u.probs[k]) for (let i = 0; i < MAX_STEPS; i++) probs[k][i] = u.probs[k][i];
+                if (u.vels[k])  for (let i = 0; i < MAX_STEPS; i++) vels[k][i]  = u.vels[k][i];
+                rowDiv[k] = u.divs[k] || 1;
+                if (presetDivs) presetDivs[slot][k] = rowDiv[k];
+            });
+            clearUndo = null; clearTimeout(clearUndoTimer); setClearBtn(false);
+            savePresetGrids(); renderCells();
+            return;
+        }
+
+        // --- snapshot for undo, then wipe this preset's hits in place ---
+        const copy = (obj) => { const o = {}; for (const k in obj) o[k] = obj[k].slice(); return o; };
+        clearUndo = { slot, grid: copy(grid), probs: copy(probs), vels: copy(vels), divs: { ...rowDiv } };
+        allRows().forEach(r => {
+            const k = r.key;
+            if (grid[k])  grid[k].fill(0);
+            if (probs[k]) probs[k].fill(100);
+            if (vels[k])  vels[k].fill(100);
+            rowDiv[k] = 1;
+            if (presetDivs) presetDivs[slot][k] = 1;
+        });
+        cuedPreset = null;
         document.getElementById('cueNote').textContent = '';
+        savePresetGrids(); renderCells(); renderPresets();
+
+        setClearBtn(true);
+        clearTimeout(clearUndoTimer);
+        clearUndoTimer = setTimeout(() => { clearUndo = null; setClearBtn(false); }, 5000);
     });
 
     // Cycle to the next / previous preset. Respects the same cue behavior:
@@ -2677,6 +2753,7 @@
     function collectFullRig() {
         return {
             app: 'sixteen', version: 2, exported: new Date().toISOString(),
+            presetNames: PRESETS.map(p => p.name),
             presets: {
                 grids: presetGrids, probs: presetProbs,
                 vels: presetVels, divs: presetDivs, steps: presetSteps,
@@ -2759,12 +2836,17 @@
                     if (P2.vels)  presetVels  = P2.vels;
                     if (P2.divs)  presetDivs  = P2.divs;
                     if (P2.steps) presetSteps = P2.steps;
+                    if (!presetDivs) presetDivs = PRESETS.map(() => fullDivs());
                     // pad any missing lanes so a row added later can't break it
                     const fix = (coll, fill) => coll && coll.forEach(obj => ROWS.forEach(r => {
                         if (!Array.isArray(obj[r.key])) obj[r.key] = new Array(MAX_STEPS).fill(fill);
                         while (obj[r.key].length < MAX_STEPS) obj[r.key].push(fill);
                     }));
                     fix(presetGrids, 0); fix(presetProbs, 100); fix(presetVels, 100);
+                }
+                if (Array.isArray(d.presetNames)) {
+                    d.presetNames.forEach((n, i) => { if (PRESETS[i] && typeof n === 'string' && n.trim()) PRESETS[i].name = n; });
+                    savePresetNames();
                 }
                 if (d.global) applyGlobal(d.global);
                 if (d.setups) writeSetups(d.setups);
@@ -3712,15 +3794,31 @@
                 xyApply(x, y);
             }
         };
+        const puckEl = document.getElementById('xyPuck');
+        let tapStart = null;
         pad.addEventListener('pointerdown', (ev) => {
-            dragging = true;
-            pad.setPointerCapture(ev.pointerId);
-            move(ev);
+            const onPuck = (ev.target === puckEl);
+            if (onPuck || ev.pointerType === 'mouse') {
+                // grabbing the puck (or any mouse press) starts a drag
+                dragging = true;
+                pad.setPointerCapture(ev.pointerId);
+                move(ev);
+            } else {
+                // a touch on the empty pad might be a scroll — wait and see
+                tapStart = { x: ev.clientX, y: ev.clientY };
+            }
         });
         pad.addEventListener('pointermove', (ev) => { if (dragging) move(ev); });
-        const end = () => { if (dragging) { dragging = false; xySave(); } };
-        pad.addEventListener('pointerup', end);
-        pad.addEventListener('pointercancel', end);
+        pad.addEventListener('pointerup', (ev) => {
+            if (dragging) { dragging = false; xySave(); return; }
+            // a clean tap (no swipe) places the puck there
+            if (tapStart && Math.hypot(ev.clientX - tapStart.x, ev.clientY - tapStart.y) < 10) {
+                move(ev); xySave();
+            }
+            tapStart = null;
+        });
+        // the browser took the gesture over as a scroll: do nothing at all
+        pad.addEventListener('pointercancel', () => { dragging = false; tapStart = null; });
 
         document.getElementById('genToggle').addEventListener('click', (ev) => {
             if (ev.target.id === 'genReroll') return;
@@ -3880,11 +3978,25 @@
         if (g) { applyGlobal(g); selectRow(selectedRow); }
     })();
 
+    document.getElementById('renamePreset').addEventListener('click', () =>
+        renamePreset(currentPreset >= 0 ? currentPreset : 0));
+
     // reset all four presets back to their factory patterns
     document.getElementById('resetPresets').addEventListener('click', () => {
-        if (!confirm('Reset all four presets to their original patterns? Your edits to them will be lost.')) return;
+        if (!confirm('Reset all four presets to their original patterns and names? Your edits to them will be lost.')) return;
+        // reset EVERY per-preset layer, not just the hits
         presetGrids = PRESETS.map((_, idx) => presetToGrid(idx));
+        presetProbs = PRESETS.map((_, idx) => presetToProbs(idx));
+        presetVels  = PRESETS.map((_, idx) => presetToVels(idx));
+        presetDivs  = PRESETS.map(() => fullDivs());
+        presetSteps = PRESETS.map(p => p.steps || MAX_STEPS);
+        FACTORY_NAMES.forEach((n, i) => PRESETS[i].name = n);
+        savePresetNames();
         savePresetGrids();
+        if (typeof xyByPreset !== 'undefined') {
+            xyByPreset = {};
+            try { localStorage.setItem(XY_KEY, '{}'); } catch (e) {}
+        }
         loadPreset(currentPreset >= 0 ? currentPreset : 0);
     });
 </script>
